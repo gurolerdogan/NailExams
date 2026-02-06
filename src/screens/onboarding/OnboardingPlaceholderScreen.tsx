@@ -2,7 +2,7 @@ import React from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 
 import PrimaryButton from '../../components/PrimaryButton';
-import { setOnboardingDone } from '../../services/storage/onboardingStorage';
+import { setOnboardingDone } from '../../services/storage/nailexamsStorage';
 import { useAuth } from '../../context/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
