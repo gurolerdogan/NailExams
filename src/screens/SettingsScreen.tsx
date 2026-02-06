@@ -3,7 +3,36 @@ import { Alert, StyleSheet, Text, View } from 'react-native';
 import PrimaryButton from '../components/PrimaryButton';
 import { useAuth } from '../context/AuthContext';
 
+
+import { wipeAll } from '../services/storage/nailexamsStorage';
+
+
+
+
+
+
 export default function SettingsScreen() {
+
+
+  const { refreshOnboarding, refreshUserData } = useAuth();
+
+  const onResetOnboarding = async () => {
+    Alert.alert('Reset onboarding?', 'This will wipe local NailExams data on this device.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Reset',
+        style: 'destructive',
+        onPress: async () => {
+          await wipeAll();
+          await refreshUserData();
+          await refreshOnboarding();
+        },
+      },
+    ]);
+  };
+
+
+
   const { logout } = useAuth();
 
   const onLogout = async () => {
@@ -17,6 +46,9 @@ export default function SettingsScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>Settings</Text>
       <PrimaryButton title="Logout" onPress={onLogout} />
+
+      <PrimaryButton title="Reset onboarding (wipe local)" onPress={onResetOnboarding} />
+
     </View>
   );
 }
