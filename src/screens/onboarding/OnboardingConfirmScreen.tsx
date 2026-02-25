@@ -9,6 +9,7 @@ import type { OnboardingStackParamList } from '../../navigation/OnboardingNaviga
 import type { Subject, UserProfile } from '../../types/models';
 import { now } from '../../utils/time';
 import { uuid } from '../../utils/id';
+import { logEvent } from '../../services/logging/logEvent';
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, 'OnboardingConfirm'>;
 
@@ -49,7 +50,8 @@ export default function OnboardingConfirmScreen({ route }: Props) {
 
       await refreshUserData();
       await refreshOnboarding();
-
+      
+      await logEvent('onboarding_completed', { level: examLevel, subjectsCount: subjects.length });
       console.log('onboarding_completed');
     } catch {
       Alert.alert('Something went wrong', 'Unable to finish onboarding. Please try again.');

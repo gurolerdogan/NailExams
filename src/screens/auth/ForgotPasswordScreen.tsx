@@ -7,6 +7,7 @@ import PrimaryButton from '../../components/PrimaryButton';
 import { requestPasswordReset } from '../../services/auth/authService';
 import { useFirebaseError } from '../../hooks/useFirebaseError';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
+import { logEvent } from '../../services/logging/logEvent';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'ForgotPassword'>;
 
@@ -21,6 +22,8 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
     try {
       setBusy(true);
       await requestPasswordReset(email);
+
+      await logEvent('password_reset_requested', { email: email.trim() });
       navigation.replace('PasswordResetConfirmation', { email: email.trim() });
     } catch (e) {
       Alert.alert('Reset failed', mapError(e));

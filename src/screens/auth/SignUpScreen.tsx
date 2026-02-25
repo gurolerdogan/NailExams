@@ -7,6 +7,7 @@ import PrimaryButton from '../../components/PrimaryButton';
 import { signUp } from '../../services/auth/authService';
 import { useFirebaseError } from '../../hooks/useFirebaseError';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
+import { logEvent } from '../../services/logging/logEvent';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'SignUp'>;
 
@@ -25,6 +26,8 @@ export default function SignUpScreen({ navigation }: Props) {
     try {
       setBusy(true);
       await signUp(email, password);
+
+      await logEvent('signup_success', { email: email.trim() });
       Alert.alert('Account created', 'You can now proceed. Task 8 will enable routing.');
       navigation.popToTop();
     } catch (e) {

@@ -3,6 +3,7 @@ import { Alert, StyleSheet, Text, View } from 'react-native';
 import PrimaryButton from '../components/PrimaryButton';
 import { useAuth } from '../context/AuthContext';
 import { wipeAll } from '../services/storage/nailexamsStorage';
+import { logEvent } from '../services/logging/logEvent';
 
 export default function SettingsScreen() {
   const { profile, subjects, logout, refreshOnboarding, refreshUserData } = useAuth();
@@ -17,9 +18,12 @@ export default function SettingsScreen() {
           await wipeAll();
           await refreshUserData();
           await refreshOnboarding();
+          
         },
       },
     ]);
+
+    await logEvent('local_wipe', {});
   };
 
   const onLogout = async () => {
@@ -27,6 +31,7 @@ export default function SettingsScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Logout', style: 'destructive', onPress: () => void logout() },
     ]);
+    await logEvent('logout', {});
   };
 
   return (
