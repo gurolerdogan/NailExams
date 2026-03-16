@@ -5,7 +5,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import HomeScreen from '../screens/HomeScreen';
 import ExamsScreen from '../screens/ExamsScreen';
 import PracticeScreen from '../screens/PracticeScreen';
-import SettingsScreen from '../screens/SettingsScreen';
+import SettingsNavigator from './SettingsNavigator';
 
 export type RootTabParamList = {
   Home: undefined;
@@ -28,7 +28,7 @@ export default function AppNavigator() {
         <Tab.Screen name="Home" component={HomeScreen} />
         <Tab.Screen name="Exams" component={ExamsScreen} />
         <Tab.Screen name="Practice" component={PracticeScreen} />
-        <Tab.Screen name="Settings" component={SettingsScreen} />
+        <Tab.Screen name="Settings" component={SettingsNavigator} />
       </Tab.Navigator>
     </NavigationContainer>
   );

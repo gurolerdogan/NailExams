@@ -4,8 +4,12 @@ import PrimaryButton from '../components/PrimaryButton';
 import { useAuth } from '../context/AuthContext';
 import { wipeAll } from '../services/storage/nailexamsStorage';
 import { logEvent } from '../services/logging/logEvent';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { SettingsStackParamList } from '../navigation/SettingsNavigator';
 
-export default function SettingsScreen() {
+type Props = NativeStackScreenProps<SettingsStackParamList, 'SettingsHome'>;
+
+export default function SettingsScreen({ navigation }: Props) {
   const { profile, subjects, logout, refreshOnboarding, refreshUserData } = useAuth();
 
   const onReset = async () => {
@@ -46,7 +50,11 @@ export default function SettingsScreen() {
 
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Actions</Text>
+        <PrimaryButton title="Edit subjects" onPress={() => navigation.navigate('EditSubjects')} />
+        <View style={{ height: 10 }} />
         <PrimaryButton title="Reset onboarding (wipe local)" onPress={onReset} />
+        <View style={{ height: 10 }} />
+        <PrimaryButton title="View logs" onPress={() => navigation.navigate('Logs')} />
         <View style={{ height: 10 }} />
         <PrimaryButton title="Logout" onPress={onLogout} />
       </View>

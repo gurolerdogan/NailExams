@@ -19,6 +19,7 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
   const canSubmit = useMemo(() => email.trim().length > 3 && !busy, [email, busy]);
 
   const onReset = async () => {
+    if (busy) return;
     try {
       setBusy(true);
       await requestPasswordReset(email);
@@ -45,7 +46,7 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
         autoCapitalize="none"
       />
 
-      <PrimaryButton title={busy ? 'Sending…' : 'Send reset email'} onPress={onReset} disabled={!canSubmit} />
+      <PrimaryButton title={busy ? 'Sending…' : 'Send reset email'} onPress={onReset} disabled={!canSubmit || busy} />
     </View>
   );
 }

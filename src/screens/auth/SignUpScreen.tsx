@@ -23,6 +23,7 @@ export default function SignUpScreen({ navigation }: Props) {
   );
 
   const onSignUp = async () => {
+     if (busy) return;
     try {
       setBusy(true);
       await signUp(email, password);
@@ -58,7 +59,7 @@ export default function SignUpScreen({ navigation }: Props) {
         autoCapitalize="none"
       />
 
-      <PrimaryButton title={busy ? 'Creating…' : 'Create account'} onPress={onSignUp} disabled={!canSubmit} />
+      <PrimaryButton title={busy ? 'Creating…' : 'Create account'} onPress={onSignUp} disabled={!canSubmit  || busy} />
 
       <View style={styles.links}>
         <Text style={styles.link} onPress={() => navigation.popToTop()}>

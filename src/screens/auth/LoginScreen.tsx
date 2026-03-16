@@ -7,6 +7,8 @@ import PrimaryButton from '../../components/PrimaryButton';
 import { signIn } from '../../services/auth/authService';
 import { useFirebaseError } from '../../hooks/useFirebaseError';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
+import { logEvent } from '../../services/logging/logEvent';
+
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
@@ -22,10 +24,13 @@ export default function LoginScreen({ navigation }: Props) {
   );
 
   const onLogin = async () => {
+    if (busy) return;
     try {
       setBusy(true);
       await signIn(email, password);
       // Task 8 will route based on auth state. For now just show success.
+      
+      await logEvent('login_success', { email: email.trim() });
       Alert.alert('Logged in', 'Auth succeeded. Task 8 will enable app routing.');
     } catch (e) {
       Alert.alert('Login failed', mapError(e));
@@ -55,13 +60,13 @@ export default function LoginScreen({ navigation }: Props) {
         autoCapitalize="none"
       />
 
-      <PrimaryButton title={busy ? 'Signing in…' : 'Sign in'} onPress={onLogin} disabled={!canSubmit} />
+      <PrimaryButton title={busy ? 'Signing in…' : 'Sign in'} onPress={onLogin} disabled={!canSubmit || busy} />
 
       <View style={styles.links}>
-        <Text style={styles.link} onPress={() => navigation.navigate('ForgotPassword')}>
+        <Text style={styles.link} onPress={() => !busy && navigation.navigate('ForgotPassword')}>
           Forgot password?
         </Text>
-        <Text style={styles.link} onPress={() => navigation.navigate('SignUp')}>
+        <Text style={styles.link} onPress={() => !busy && navigation.navigate('SignUp')}>
           Create account
         </Text>
       </View>
