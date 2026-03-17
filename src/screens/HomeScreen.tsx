@@ -3,7 +3,16 @@ import { StyleSheet, Text, View } from 'react-native';
 import PrimaryButton from '../components/PrimaryButton';
 import { useAuth } from '../context/AuthContext';
 
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { HomeStackParamList } from '../navigation/HomeNavigator';
+
+
+
+
 export default function HomeScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
+
   const { profile, subjects, refreshUserData } = useAuth();
 
   useEffect(() => {
@@ -24,6 +33,7 @@ export default function HomeScreen() {
         <Text style={styles.metaSmall}>
           {subjects.length ? subjectNames.join(', ') : 'No subjects yet'}
         </Text>
+        <PrimaryButton title="Manage subjects" onPress={() => navigation.navigate('Subjects')} />
       </View>
 
       <View style={styles.card}>
