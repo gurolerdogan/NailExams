@@ -24,6 +24,7 @@ export type Topic = {
   subjectId: UUID;
   name: string;
   confidence?: 1 | 2 | 3 | 4 | 5;
+   lastPracticedAt?: number;
   createdAt: number;
   updatedAt: number;
 };
