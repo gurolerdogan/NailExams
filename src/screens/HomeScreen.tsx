@@ -8,7 +8,6 @@ import {
   View,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 
 import { useAuth } from '../context/AuthContext';
@@ -16,7 +15,6 @@ import { loadPlan } from '../services/storage/planStorage';
 import { loadTopics } from '../services/storage/nailexamsStorage';
 import type { WeeklyPlan } from '../types/plan';
 import type { Topic } from '../types/models';
-import type { HomeStackParamList } from '../navigation/HomeNavigator';
 import type { AppTabParamList } from '../navigation/TabNavigator';
 
 const TILE_PALETTE = [
@@ -32,7 +30,6 @@ const TILE_PALETTE = [
 
 const CONF_BAR_COLORS = ['#E24B4A', '#EF9F27', '#FAC775', '#97C459', '#1D9E75'];
 
-// ─── Date helpers ─────────────────────────────────────────────────────────────
 function toISODate(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -71,41 +68,31 @@ function dayNum(iso: string) {
   return String(Number(iso.slice(-2)));
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-/** Bars only reflect topics that have been checked in (confidence 1-5) */
 function ConfidenceBars({ bars }: { bars: number[] }) {
   const max = Math.max(...bars, 1);
   return (
     <View style={styles.barsRow}>
-      {bars.map((count, i) => {
-        const heightPct = Math.max(0.15, count / max);
-        return (
-          <View
-            key={i}
-            style={[
-              styles.bar,
-              {
-                height: Math.max(4, Math.round(heightPct * 20)),
-                backgroundColor: CONF_BAR_COLORS[i],
-                opacity: count === 0 ? 0.2 : 1,
-              },
-            ]}
-          />
-        );
-      })}
+      {bars.map((count, i) => (
+        <View
+          key={i}
+          style={[
+            styles.bar,
+            {
+              height: Math.max(4, Math.round((Math.max(0.15, count / max)) * 20)),
+              backgroundColor: CONF_BAR_COLORS[i],
+              opacity: count === 0 ? 0.2 : 1,
+            },
+          ]}
+        />
+      ))}
     </View>
   );
 }
 
-// ─── Main screen ──────────────────────────────────────────────────────────────
-
 type HomeMode = 'subjects' | 'plan';
 
 export default function HomeScreen() {
-  const stackNav = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
   const tabNav = useNavigation<BottomTabNavigationProp<AppTabParamList>>();
-
   const { profile, subjects, refreshUserData } = useAuth();
 
   const [mode, setMode] = useState<HomeMode>('subjects');
@@ -118,7 +105,6 @@ export default function HomeScreen() {
     const [p, t] = await Promise.all([loadPlan(), loadTopics()]);
     setPlan(p);
     setAllTopics(t);
-
     if (p) {
       const days = weekDates(p.weekStart);
       if (!days.includes(selectedDate)) setSelectedDate(days[0]);
@@ -130,7 +116,6 @@ export default function HomeScreen() {
 
   const level = profile?.examLevel ?? '—';
 
-  // Only count topics that have been checked in (confidence 1-5); ignore confidence === 0
   const confidenceBySubject = useMemo(() => {
     const map = new Map<string, number[]>();
     for (const s of subjects) {
@@ -159,11 +144,9 @@ export default function HomeScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Header */}
       <Text style={styles.appTitle}>NailExams</Text>
       <Text style={styles.subTitle}>{level} · {subjects.length} subjects</Text>
 
-      {/* Pill toggle */}
       <View style={styles.pillSwitcher}>
         <Pressable
           style={[styles.pill, mode === 'subjects' && styles.pillActive]}
@@ -186,14 +169,10 @@ export default function HomeScreen() {
       {/* ── SUBJECTS MODE ── */}
       {mode === 'subjects' && (
         <View>
-          <View style={styles.modeHeader}>
-            <Pressable onPress={() => stackNav.navigate('Subjects')}>
-              <Text style={styles.manageLink}>Manage subjects</Text>
-            </Pressable>
-          </View>
-
           {subjects.length === 0 ? (
-            <Text style={styles.emptyText}>No subjects yet. Tap "Manage subjects" to add some.</Text>
+            <Text style={styles.emptyText}>
+              No subjects yet. Go to Settings → Edit subjects to add some.
+            </Text>
           ) : (
             <View style={styles.subjectGrid}>
               {subjects.map((s, idx) => {
@@ -226,10 +205,7 @@ export default function HomeScreen() {
               <Text style={styles.emptyBody}>
                 Head to the Plan tab to generate your weekly study plan.
               </Text>
-              <Pressable
-                style={styles.goBtn}
-                onPress={() => tabNav.navigate('Plan')}
-              >
+              <Pressable style={styles.goBtn} onPress={() => tabNav.navigate('Plan')}>
                 <Text style={styles.goBtnText}>Go to Plan</Text>
               </Pressable>
             </View>
@@ -295,7 +271,6 @@ export default function HomeScreen() {
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F2F2F7' },
   content: { padding: 16, paddingBottom: 28 },
@@ -322,17 +297,13 @@ const styles = StyleSheet.create({
   pillText: { fontSize: 13, fontWeight: '500', color: '#888' },
   pillTextActive: { color: '#1C1C1E' },
 
-  modeHeader: { alignItems: 'flex-end', marginBottom: 8 },
-  manageLink: { fontSize: 12, fontWeight: '500', color: '#185FA5', textDecorationLine: 'underline' },
-
   subjectGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   subjectTile: { width: '47.5%', borderRadius: 16, padding: 12, paddingBottom: 10 },
   tileName: { fontSize: 13, fontWeight: '500', marginBottom: 8, lineHeight: 18 },
-
   barsRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 24 },
   bar: { flex: 1, borderRadius: 2 },
 
-  emptyText: { textAlign: 'center', color: '#888', marginTop: 20, fontSize: 13 },
+  emptyText: { textAlign: 'center', color: '#888', marginTop: 20, fontSize: 13, lineHeight: 20 },
 
   emptyPlan: { paddingVertical: 20, alignItems: 'center' },
   emptyTitle: { fontSize: 17, fontWeight: '600', color: '#1C1C1E', marginBottom: 6 },
@@ -367,17 +338,9 @@ const styles = StyleSheet.create({
   },
   sessionIcon: { fontSize: 16 },
   sessionTitle: { flex: 1, fontSize: 13, fontWeight: '500', color: '#1C1C1E' },
-
-  badge: {
-    fontSize: 10,
-    fontWeight: '600',
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    borderRadius: 20,
-  },
+  badge: { fontSize: 10, fontWeight: '600', paddingVertical: 3, paddingHorizontal: 8, borderRadius: 20 },
   badgeDone: { backgroundColor: '#DCFCE7', color: '#166534' },
   badgePlanned: { backgroundColor: '#FEF9C3', color: '#854D0E' },
-
   emptySmall: { textAlign: 'center', color: '#AAA', marginVertical: 12, fontSize: 13 },
 
   goBtn: {

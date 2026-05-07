@@ -1,9 +1,17 @@
 import React, { useMemo, useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
-import AuthInput from '../../components/AuthInput';
-import PrimaryButton from '../../components/PrimaryButton';
 import { signUp } from '../../services/auth/authService';
 import { useFirebaseError } from '../../hooks/useFirebaseError';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
@@ -15,21 +23,19 @@ export default function SignUpScreen({ navigation }: Props) {
   const mapError = useFirebaseError();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-
   const [busy, setBusy] = useState(false);
+
   const canSubmit = useMemo(
     () => email.trim().length > 3 && password.length >= 6 && !busy,
     [email, password, busy],
   );
 
   const onSignUp = async () => {
-     if (busy) return;
+    if (!canSubmit) return;
     try {
       setBusy(true);
-      await signUp(email, password);
-
+      await signUp(email.trim(), password);
       await logEvent('signup_success', { email: email.trim() });
-      Alert.alert('Account created', 'You can now proceed. Task 8 will enable routing.');
       navigation.popToTop();
     } catch (e) {
       Alert.alert('Sign up failed', mapError(e));
@@ -39,40 +45,113 @@ export default function SignUpScreen({ navigation }: Props) {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Create your account</Text>
+    <SafeAreaView style={styles.safe}>
+      <KeyboardAvoidingView
+        style={styles.kav}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <View style={styles.container}>
 
-      <AuthInput
-        label="Email"
-        value={email}
-        onChangeText={setEmail}
-        placeholder="name@example.com"
-        keyboardType="email-address"
-        autoCapitalize="none"
-      />
-      <AuthInput
-        label="Password"
-        value={password}
-        onChangeText={setPassword}
-        placeholder="At least 6 characters"
-        secureTextEntry
-        autoCapitalize="none"
-      />
+          {/* Header */}
+          <View style={styles.hero}>
+            <Text style={styles.title}>Create account</Text>
+            <Text style={styles.subtitle}>Join NailExams and start revising.</Text>
+          </View>
 
-      <PrimaryButton title={busy ? 'Creating…' : 'Create account'} onPress={onSignUp} disabled={!canSubmit  || busy} />
+          {/* Form */}
+          <View style={styles.form}>
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>EMAIL</Text>
+              <TextInput
+                style={styles.input}
+                value={email}
+                onChangeText={setEmail}
+                placeholder="name@example.com"
+                placeholderTextColor="#BBBBBB"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!busy}
+              />
+            </View>
 
-      <View style={styles.links}>
-        <Text style={styles.link} onPress={() => navigation.popToTop()}>
-          Already have an account? Sign in
-        </Text>
-      </View>
-    </View>
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>PASSWORD</Text>
+              <TextInput
+                style={styles.input}
+                value={password}
+                onChangeText={setPassword}
+                placeholder="At least 6 characters"
+                placeholderTextColor="#BBBBBB"
+                secureTextEntry
+                autoCapitalize="none"
+                editable={!busy}
+              />
+            </View>
+
+            <Pressable
+              style={[styles.createBtn, !canSubmit && { opacity: 0.45 }]}
+              onPress={onSignUp}
+              disabled={!canSubmit}
+            >
+              <Text style={styles.createBtnText}>
+                {busy ? 'Creating account…' : 'Create account'}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.backLink}
+              onPress={() => !busy && navigation.popToTop()}
+            >
+              <Text style={styles.backLinkText}>← Already have an account? Sign in</Text>
+            </Pressable>
+          </View>
+
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, justifyContent: 'center' },
-  title: { fontSize: 26, fontWeight: '700', marginBottom: 16, textAlign: 'center' },
-  links: { marginTop: 14, alignItems: 'center' },
-  link: { textDecorationLine: 'underline', fontSize: 15 },
+  safe: { flex: 1, backgroundColor: '#FFFFFF' },
+  kav: { flex: 1 },
+  container: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
+
+  hero: { marginBottom: 32 },
+  title: { fontSize: 28, fontWeight: '700', color: '#1C1C1E', letterSpacing: -0.3 },
+  subtitle: { fontSize: 14, color: '#888', marginTop: 4 },
+
+  form: { gap: 0 },
+  field: { marginBottom: 14 },
+  fieldLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#AAA',
+    letterSpacing: 0.6,
+    marginBottom: 6,
+  },
+  input: {
+    backgroundColor: '#F5F5F5',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 15,
+    color: '#1C1C1E',
+    borderWidth: 1,
+    borderColor: '#EBEBEB',
+  },
+
+  createBtn: {
+    backgroundColor: '#1C1C1E',
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 6,
+    marginBottom: 20,
+  },
+  createBtnText: { color: '#FFF', fontSize: 15, fontWeight: '600' },
+
+  backLink: { alignItems: 'center', paddingVertical: 4 },
+  backLinkText: { fontSize: 13, color: '#888' },
 });
