@@ -11,6 +11,9 @@ import { now } from '../../utils/time';
 import { uuid } from '../../utils/id';
 import { logEvent } from '../../services/logging/logEvent';
 
+import { preloadGcseTopicsForSubjects } from '../../services/seed/preloadGcseTopics';
+
+
 type Props = NativeStackScreenProps<OnboardingStackParamList, 'OnboardingConfirm'>;
 
 export default function OnboardingConfirmScreen({ route }: Props) {
@@ -46,6 +49,7 @@ export default function OnboardingConfirmScreen({ route }: Props) {
 
       await saveProfile(profile);
       await saveSubjects(subjects);
+      await preloadGcseTopicsForSubjects({ examLevel: profile.examLevel, subjects });
       await setOnboardingDone(true);
 
       await refreshUserData();

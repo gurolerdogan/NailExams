@@ -7,12 +7,14 @@ import PrimaryButton from '../../components/PrimaryButton';
 import type { OnboardingStackParamList } from '../../navigation/OnboardingNavigator';
 import type { ExamLevel } from '../../types/models';
 
+import { GCSE_SUBJECT_PRESETS } from '../../data/gcseTopicCatalog';
+
 type Props = NativeStackScreenProps<OnboardingStackParamList, 'OnboardingSubjects'>;
 
 type PresetMap = Record<ExamLevel, string[]>;
 
 const PRESET_SUBJECTS: PresetMap = {
-  GCSE: ['Math', 'English', 'Physics', 'Chemistry', 'Biology', 'Computer Science', 'History', 'Geography'],
+  GCSE: GCSE_SUBJECT_PRESETS,
   A_LEVEL: ['Math', 'Further Math', 'Physics', 'Chemistry', 'Biology', 'Computer Science', 'Economics'],
 };
 

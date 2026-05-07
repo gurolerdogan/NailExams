@@ -31,7 +31,7 @@ export default function LoginScreen({ navigation }: Props) {
       // Task 8 will route based on auth state. For now just show success.
       
       await logEvent('login_success', { email: email.trim() });
-      Alert.alert('Logged in', 'Auth succeeded. Task 8 will enable app routing.');
+      //Alert.alert('Logged in', 'Auth succeeded. Task 8 will enable app routing.');
     } catch (e) {
       Alert.alert('Login failed', mapError(e));
     } finally {

@@ -71,5 +71,7 @@ export async function wipeAll(): Promise<void> {
     removeKey(STORAGE_KEYS.topicsV1),
     removeKey(STORAGE_KEYS.onboardingDone),
     removeKey(STORAGE_KEYS.storageVersion),
+    removeKey(STORAGE_KEYS.attemptsV1),
+    removeKey(STORAGE_KEYS.planV1),
   ]);
 }

@@ -8,17 +8,9 @@ import { saveSubjects } from '../services/storage/nailexamsStorage';
 import { uuid } from '../utils/id';
 import { now } from '../utils/time';
 import { logEvent } from '../services/logging/logEvent';
+import { preloadGcseTopicsForSubjects } from '../services/seed/preloadGcseTopics';
 
-const GCSE_PRESETS = [
-  'Math',
-  'English',
-  'Physics',
-  'Chemistry',
-  'Biology',
-  'Computer Science',
-  'History',
-  'Geography',
-];
+import { GCSE_SUBJECT_PRESETS } from '../data/gcseTopicCatalog';
 
 const ALEVEL_PRESETS = [
   'Math',
@@ -31,7 +23,7 @@ const ALEVEL_PRESETS = [
 ];
 
 function presetsFor(level: ExamLevel) {
-  return level === 'GCSE' ? GCSE_PRESETS : ALEVEL_PRESETS;
+  return level === 'GCSE' ? GCSE_SUBJECT_PRESETS : ALEVEL_PRESETS;
 }
 
 export default function EditSubjectsScreen() {
@@ -94,6 +86,8 @@ export default function EditSubjectsScreen() {
       }));
 
       await saveSubjects(nextSubjects);
+      await preloadGcseTopicsForSubjects({ examLevel: level, subjects: nextSubjects });
+
       await refreshUserData();
       await logEvent('subjects_updated', { count: nextSubjects.length });
 

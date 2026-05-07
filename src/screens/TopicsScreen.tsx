@@ -1,31 +1,27 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, FlatList, StyleSheet, Text, View } from 'react-native';
 import { RouteProp, useRoute } from '@react-navigation/native';
 
 import PrimaryButton from '../components/PrimaryButton';
 import type { Topic } from '../types/models';
 import { loadTopics, saveTopics } from '../services/storage/nailexamsStorage';
-import { uuid } from '../utils/id';
 import { now } from '../utils/time';
 import { logEvent } from '../services/logging/logEvent';
 import type { HomeStackParamList } from '../navigation/HomeNavigator';
+import { GCSE_TOPIC_CATALOG } from '../data/gcseTopicCatalog';
 
 type TopicsRoute = RouteProp<HomeStackParamList, 'Topics'>;
+
+function normalize(s: string) {
+  return s.trim().toLowerCase();
+}
 
 export default function TopicsScreen() {
   const route = useRoute<TopicsRoute>();
   const { subjectId, subjectName } = route.params;
 
   const [allTopics, setAllTopics] = useState<Topic[]>([]);
-  const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
-
-  const topics = useMemo(
-    () => allTopics.filter((t) => t.subjectId === subjectId).sort((a, b) => a.name.localeCompare(b.name)),
-    [allTopics, subjectId],
-  );
-
-  const canAdd = useMemo(() => name.trim().length >= 2 && !busy, [name, busy]);
 
   const refresh = useCallback(async () => {
     const data = await loadTopics();
@@ -36,76 +32,44 @@ export default function TopicsScreen() {
     void refresh();
   }, [refresh]);
 
-  const persistAll = useCallback(
-    async (nextAll: Topic[]) => {
-      setAllTopics(nextAll);
-      await saveTopics(nextAll);
-    },
-    [],
-  );
+  const catalogOrder = useMemo(() => {
+    // For GCSE MVP: use catalog order if subject exists in catalog; otherwise fallback to alpha
+    const list = GCSE_TOPIC_CATALOG[subjectName] ?? [];
+    const idx = new Map<string, number>();
+    list.forEach((name, i) => idx.set(normalize(name), i));
+    return idx;
+  }, [subjectName]);
 
-  const onAdd = async () => {
-    if (busy) return;
-    const trimmed = name.trim();
-    if (trimmed.length < 2) return;
+  const topics = useMemo(() => {
+    const scoped = allTopics.filter((t) => t.subjectId === subjectId);
 
-    const exists = topics.some((t) => t.name.toLowerCase() === trimmed.toLowerCase());
-    if (exists) {
-      Alert.alert('Already exists', 'That topic is already in this subject.');
-      return;
+    // If this subject is in catalog: sort by catalog index; unknowns go to bottom alphabetically
+    if ((GCSE_TOPIC_CATALOG[subjectName] ?? []).length > 0) {
+      return scoped.sort((a, b) => {
+        const ai = catalogOrder.get(normalize(a.name));
+        const bi = catalogOrder.get(normalize(b.name));
+        const aHas = ai !== undefined;
+        const bHas = bi !== undefined;
+
+        if (aHas && bHas) return (ai as number) - (bi as number);
+        if (aHas && !bHas) return -1;
+        if (!aHas && bHas) return 1;
+        return a.name.localeCompare(b.name);
+      });
     }
 
-    try {
-      setBusy(true);
-      const ts = now();
+    // Fallback: alphabetical
+    return scoped.sort((a, b) => a.name.localeCompare(b.name));
+  }, [allTopics, subjectId, subjectName, catalogOrder]);
 
-      const created: Topic = {
-        id: uuid(),
-        subjectId,
-        name: trimmed,
-        confidence: 3,
-        createdAt: ts,
-        updatedAt: ts,
-      };
-
-      await persistAll([...allTopics, created]);
-      await logEvent('topic_added', { subjectId, name: trimmed });
-      setName('');
-    } catch (e: any) {
-      Alert.alert('Add failed', String(e?.message ?? e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const onDelete = async (topicId: string) => {
-    if (busy) return;
-    const current = allTopics.find((t) => t.id === topicId);
-    if (!current) return;
-
-    Alert.alert('Delete topic?', `This will remove "${current.name}".`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            setBusy(true);
-            const nextAll = allTopics.filter((t) => t.id !== topicId);
-            await persistAll(nextAll);
-            await logEvent('topic_deleted', { subjectId, name: current.name });
-          } catch (e: any) {
-            Alert.alert('Delete failed', String(e?.message ?? e));
-          } finally {
-            setBusy(false);
-          }
-        },
-      },
-    ]);
-  };
+  const persistAll = useCallback(async (nextAll: Topic[]) => {
+    setAllTopics(nextAll);
+    await saveTopics(nextAll);
+  }, []);
 
   const onCycleConfidence = async (topicId: string) => {
     if (busy) return;
+
     const idx = allTopics.findIndex((t) => t.id === topicId);
     if (idx < 0) return;
 
@@ -113,7 +77,7 @@ export default function TopicsScreen() {
       setBusy(true);
       const current = allTopics[idx];
       const cur = current.confidence ?? 3;
-      const nextConfidence = (cur % 5) + 1 as 1 | 2 | 3 | 4 | 5;
+      const nextConfidence = (((cur as number) % 5) + 1) as 1 | 2 | 3 | 4 | 5;
 
       const updated: Topic = {
         ...current,
@@ -143,45 +107,32 @@ export default function TopicsScreen() {
       <Text style={styles.title}>{subjectName}</Text>
       <Text style={styles.meta}>Topics: {topics.length}</Text>
 
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Add topic</Text>
-        <TextInput
-          value={name}
-          onChangeText={setName}
-          placeholder="e.g., Kinematics"
-          style={styles.input}
-          autoCapitalize="words"
-          editable={!busy}
-        />
-        <PrimaryButton title={busy ? 'Adding…' : 'Add'} onPress={onAdd} disabled={!canAdd} />
-      </View>
-
       <FlatList
         data={topics}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ paddingBottom: 16 }}
-        ListEmptyComponent={<Text style={styles.empty}>No topics yet.</Text>}
+        ListEmptyComponent={
+          <Text style={styles.empty}>
+            No topics found for this subject. (If this is a GCSE catalog subject, reset onboarding
+            to preload topics.)
+          </Text>
+        }
         renderItem={({ item }) => (
           <View style={styles.row}>
             <View style={{ flex: 1 }}>
               <Text style={styles.rowTitle}>{item.name}</Text>
-              <Text style={styles.rowSub}>Confidence: {item.confidence ?? '—'}</Text>
+              <Text style={styles.rowSub}>
+                Confidence: {item.confidence ?? '—'} • Last:{' '}
+                {item.lastPracticedAt ? new Date(item.lastPracticedAt).toLocaleDateString() : 'Never'}
+              </Text>
             </View>
 
-            <View style={styles.actions}>
-              <PrimaryButton
-                title="Confidence"
-                onPress={() => void onCycleConfidence(item.id)}
-                disabled={busy}
-                style={styles.smallBtn}
-              />
-              <PrimaryButton
-                title="Delete"
-                onPress={() => void onDelete(item.id)}
-                disabled={busy}
-                style={styles.smallBtn}
-              />
-            </View>
+            <PrimaryButton
+              title="Confidence"
+              onPress={() => void onCycleConfidence(item.id)}
+              disabled={busy}
+              style={styles.smallBtn}
+            />
           </View>
         )}
       />
@@ -194,10 +145,6 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: '700' },
   meta: { fontSize: 13, marginTop: 6, marginBottom: 12 },
 
-  card: { padding: 12, borderRadius: 12, borderWidth: 1, marginBottom: 12 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', marginBottom: 8 },
-  input: { borderWidth: 1, borderRadius: 10, padding: 10, marginBottom: 10, fontSize: 16 },
-
   empty: { marginTop: 20, textAlign: 'center' },
 
   row: {
@@ -209,9 +156,7 @@ const styles = StyleSheet.create({
     gap: 10,
     alignItems: 'center',
   },
-  rowTitle: { fontSize: 16, fontWeight: '700' },
-  rowSub: { marginTop: 2, fontSize: 12, opacity: 0.8 },
-
-  actions: { flexDirection: 'row', gap: 8 },
+  rowTitle: { fontSize: 15, fontWeight: '800' },
+  rowSub: { marginTop: 4, fontSize: 12, opacity: 0.85 },
   smallBtn: { paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10 },
 });

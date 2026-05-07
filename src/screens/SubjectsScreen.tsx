@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, FlatList, StyleSheet, Text, View } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
 
 import PrimaryButton from '../components/PrimaryButton';
 import { useAuth } from '../context/AuthContext';
@@ -8,28 +9,22 @@ import { loadSubjects, saveSubjects } from '../services/storage/nailexamsStorage
 import { uuid } from '../utils/id';
 import { now } from '../utils/time';
 import { logEvent } from '../services/logging/logEvent';
-import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { HomeStackParamList } from '../navigation/HomeNavigator';
-
-
+import { GCSE_SUBJECT_PRESETS } from '../data/gcseTopicCatalog';
+import { preloadGcseTopicsForSubjects } from '../services/seed/preloadGcseTopics';
 
 export default function SubjectsScreen() {
-    const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
-
   const { profile, refreshUserData } = useAuth();
 
   const [items, setItems] = useState<Subject[]>([]);
-  const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
+
+  // Dropdown state
+  const [selectedPreset, setSelectedPreset] = useState<string>('');
 
   const level = profile?.examLevel;
 
-  const canAdd = useMemo(() => name.trim().length >= 2 && !busy && !!level, [name, busy, level]);
-
   const refresh = useCallback(async () => {
     const data = await loadSubjects();
-    // stable sort for UI
     data.sort((a, b) => a.name.localeCompare(b.name));
     setItems(data);
   }, []);
@@ -38,99 +33,73 @@ export default function SubjectsScreen() {
     void refresh();
   }, [refresh]);
 
+  const existingNames = useMemo(() => {
+    return new Set(items.map((s) => s.name.toLowerCase()));
+  }, [items]);
+
+  const availablePresets = useMemo(() => {
+    // MVP: only GCSE fixed list. For A_LEVEL later.
+    if (level !== 'GCSE') return [];
+    return GCSE_SUBJECT_PRESETS.filter((name) => !existingNames.has(name.toLowerCase()));
+  }, [level, existingNames]);
+
+  // Ensure dropdown always points to a valid remaining option
+  useEffect(() => {
+    if (!selectedPreset) {
+      setSelectedPreset(availablePresets[0] ?? '');
+      return;
+    }
+    if (selectedPreset && !availablePresets.includes(selectedPreset)) {
+      setSelectedPreset(availablePresets[0] ?? '');
+    }
+  }, [availablePresets, selectedPreset]);
+
   const persist = useCallback(
     async (next: Subject[]) => {
       setItems(next);
       await saveSubjects(next);
-      await refreshUserData(); // keep Home/Settings in sync
+      await refreshUserData();
     },
     [refreshUserData],
   );
 
-  const onAdd = async () => {
+  const onAddFromPreset = async () => {
     if (busy) return;
-    if (!level) {
-      Alert.alert('Missing profile', 'Your exam level is not available.');
+
+    if (level !== 'GCSE') {
+      Alert.alert('Not supported yet', 'Preset add is currently available for GCSE only.');
       return;
     }
-    const trimmed = name.trim();
-    if (trimmed.length < 2) return;
 
-    const exists = items.some((s) => s.name.toLowerCase() === trimmed.toLowerCase());
-    if (exists) {
-      Alert.alert('Already exists', 'That subject is already in your list.');
+    if (!selectedPreset) {
+      Alert.alert('No subjects available', 'All preset subjects are already added.');
       return;
     }
 
     try {
       setBusy(true);
       const ts = now();
+
       const created: Subject = {
         id: uuid(),
-        name: trimmed,
+        name: selectedPreset,
         examLevel: level,
         createdAt: ts,
         updatedAt: ts,
       };
 
       const next = [...items, created].sort((a, b) => a.name.localeCompare(b.name));
+
       await persist(next);
-      await logEvent('subject_added', { name: trimmed, level });
-      setName('');
+
+      // Preload topics for newly added subject (idempotent)
+      await preloadGcseTopicsForSubjects({ examLevel: level, subjects: [created] });
+
+      await logEvent('subject_added', { name: created.name, level });
     } catch (e: any) {
       Alert.alert('Add failed', String(e?.message ?? e));
     } finally {
       setBusy(false);
-    }
-  };
-
-  const onRename = async (id: string) => {
-    if (busy) return;
-
-    const current = items.find((s) => s.id === id);
-    if (!current) return;
-
-    Alert.prompt?.(
-      'Rename subject',
-      'Enter a new name',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Save',
-          onPress: async (value: string | undefined) => {
-            const newName = (value ?? '').trim();
-            if (newName.length < 2) return;
-
-            const exists = items.some(
-              (s) => s.id !== id && s.name.toLowerCase() === newName.toLowerCase(),
-            );
-            if (exists) {
-              Alert.alert('Already exists', 'That subject name already exists.');
-              return;
-            }
-
-            try {
-              setBusy(true);
-              const next = items
-                .map((s) => (s.id === id ? { ...s, name: newName, updatedAt: now() } : s))
-                .sort((a, b) => a.name.localeCompare(b.name));
-              await persist(next);
-              await logEvent('subject_renamed', { from: current.name, to: newName });
-            } catch (e: any) {
-              Alert.alert('Rename failed', String(e?.message ?? e));
-            } finally {
-              setBusy(false);
-            }
-          },
-        },
-      ],
-      'plain-text',
-      current.name,
-    );
-
-    // If Alert.prompt is not supported (Android), fall back:
-    if (!Alert.prompt) {
-      Alert.alert('Rename not supported', 'We will add an inline rename UI in the next step.');
     }
   };
 
@@ -170,15 +139,34 @@ export default function SubjectsScreen() {
 
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Add subject</Text>
-        <TextInput
-          value={name}
-          onChangeText={setName}
-          placeholder="e.g., French"
-          style={styles.input}
-          autoCapitalize="words"
-          editable={!busy}
-        />
-        <PrimaryButton title={busy ? 'Adding…' : 'Add'} onPress={onAdd} disabled={!canAdd} />
+
+        {level !== 'GCSE' ? (
+          <Text style={styles.help}>
+            Preset subject add is currently available for GCSE only (A-Levels coming next).
+          </Text>
+        ) : availablePresets.length === 0 ? (
+          <Text style={styles.help}>All preset subjects are already added.</Text>
+        ) : (
+          <>
+            <View style={styles.pickerWrap}>
+              <Picker
+                selectedValue={selectedPreset}
+                onValueChange={(v) => setSelectedPreset(String(v))}
+                enabled={!busy}
+              >
+                {availablePresets.map((name) => (
+                  <Picker.Item key={name} label={name} value={name} />
+                ))}
+              </Picker>
+            </View>
+
+            <PrimaryButton
+              title={busy ? 'Adding…' : 'Add'}
+              onPress={onAddFromPreset}
+              disabled={busy || !selectedPreset}
+            />
+          </>
+        )}
       </View>
 
       <FlatList
@@ -193,26 +181,12 @@ export default function SubjectsScreen() {
               <Text style={styles.rowSub}>{item.examLevel}</Text>
             </View>
 
-            <View style={styles.actions}>
-              <PrimaryButton
-                title="Rename"
-                onPress={() => void onRename(item.id)}
-                disabled={busy}
-                style={styles.smallBtn}
-              />
-              <PrimaryButton
-                title="Delete"
-                onPress={() => void onDelete(item.id)}
-                disabled={busy}
-                style={styles.smallBtn}
-              />
-              <PrimaryButton
-                title="Topics"
-                onPress={() => navigation.navigate('Topics', { subjectId: item.id, subjectName: item.name })}
-                disabled={busy}
-                style={styles.smallBtn}
-                />
-            </View>
+            <PrimaryButton
+              title="Delete"
+              onPress={() => void onDelete(item.id)}
+              disabled={busy}
+              style={styles.smallBtn}
+            />
           </View>
         )}
       />
@@ -227,7 +201,9 @@ const styles = StyleSheet.create({
 
   card: { padding: 12, borderRadius: 12, borderWidth: 1, marginBottom: 12 },
   sectionTitle: { fontSize: 16, fontWeight: '700', marginBottom: 8 },
-  input: { borderWidth: 1, borderRadius: 10, padding: 10, marginBottom: 10, fontSize: 16 },
+  help: { fontSize: 13, opacity: 0.85, marginBottom: 10 },
+
+  pickerWrap: { borderWidth: 1, borderRadius: 10, marginBottom: 10, overflow: 'hidden' },
 
   empty: { marginTop: 20, textAlign: 'center' },
 
@@ -242,7 +218,5 @@ const styles = StyleSheet.create({
   },
   rowTitle: { fontSize: 16, fontWeight: '700' },
   rowSub: { marginTop: 2, fontSize: 12, opacity: 0.8 },
-
-  actions: { flexDirection: 'row', gap: 8 },
   smallBtn: { paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10 },
 });
