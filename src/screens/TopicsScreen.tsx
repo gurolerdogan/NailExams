@@ -33,7 +33,6 @@ export default function TopicsScreen() {
   }, [refresh]);
 
   const catalogOrder = useMemo(() => {
-    // For GCSE MVP: use catalog order if subject exists in catalog; otherwise fallback to alpha
     const list = GCSE_TOPIC_CATALOG[subjectName] ?? [];
     const idx = new Map<string, number>();
     list.forEach((name, i) => idx.set(normalize(name), i));
@@ -43,7 +42,6 @@ export default function TopicsScreen() {
   const topics = useMemo(() => {
     const scoped = allTopics.filter((t) => t.subjectId === subjectId);
 
-    // If this subject is in catalog: sort by catalog index; unknowns go to bottom alphabetically
     if ((GCSE_TOPIC_CATALOG[subjectName] ?? []).length > 0) {
       return scoped.sort((a, b) => {
         const ai = catalogOrder.get(normalize(a.name));
@@ -58,9 +56,14 @@ export default function TopicsScreen() {
       });
     }
 
-    // Fallback: alphabetical
     return scoped.sort((a, b) => a.name.localeCompare(b.name));
   }, [allTopics, subjectId, subjectName, catalogOrder]);
+
+  // Derived counts
+  const checkedInCount = useMemo(
+    () => topics.filter((t) => (t.confidence ?? 0) > 0).length,
+    [topics],
+  );
 
   const persistAll = useCallback(async (nextAll: Topic[]) => {
     setAllTopics(nextAll);
@@ -76,12 +79,14 @@ export default function TopicsScreen() {
     try {
       setBusy(true);
       const current = allTopics[idx];
-      const cur = current.confidence ?? 3;
-      const nextConfidence = (((cur as number) % 5) + 1) as 1 | 2 | 3 | 4 | 5;
+      const cur = current.confidence ?? 0;
+      // Cycle: 0→1→2→3→4→5→1 (never goes back to 0 via cycling)
+      const nextConfidence = (cur === 0 ? 1 : cur === 5 ? 1 : cur + 1) as 1 | 2 | 3 | 4 | 5;
 
       const updated: Topic = {
         ...current,
         confidence: nextConfidence,
+        lastPracticedAt: cur === 0 ? now() : current.lastPracticedAt, // set first check-in time
         updatedAt: now(),
       };
 
@@ -105,7 +110,9 @@ export default function TopicsScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>{subjectName}</Text>
-      <Text style={styles.meta}>Topics: {topics.length}</Text>
+      <Text style={styles.meta}>
+        {topics.length} topics · {checkedInCount} checked in
+      </Text>
 
       <FlatList
         data={topics}
@@ -117,24 +124,32 @@ export default function TopicsScreen() {
             to preload topics.)
           </Text>
         }
-        renderItem={({ item }) => (
-          <View style={styles.row}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.rowTitle}>{item.name}</Text>
-              <Text style={styles.rowSub}>
-                Confidence: {item.confidence ?? '—'} • Last:{' '}
-                {item.lastPracticedAt ? new Date(item.lastPracticedAt).toLocaleDateString() : 'Never'}
-              </Text>
-            </View>
+        renderItem={({ item }) => {
+          const isCheckedIn = (item.confidence ?? 0) > 0;
+          return (
+            <View style={styles.row}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowTitle}>{item.name}</Text>
+                <Text style={styles.rowSub}>
+                  {isCheckedIn
+                    ? `Confidence: ${item.confidence}/5 · Last: ${
+                        item.lastPracticedAt
+                          ? new Date(item.lastPracticedAt).toLocaleDateString()
+                          : 'Never'
+                      }`
+                    : 'Not checked in'}
+                </Text>
+              </View>
 
-            <PrimaryButton
-              title="Confidence"
-              onPress={() => void onCycleConfidence(item.id)}
-              disabled={busy}
-              style={styles.smallBtn}
-            />
-          </View>
-        )}
+              <PrimaryButton
+                title={isCheckedIn ? `${item.confidence}/5` : 'Check in'}
+                onPress={() => void onCycleConfidence(item.id)}
+                disabled={busy}
+                style={[styles.smallBtn, !isCheckedIn && styles.checkInBtn]}
+              />
+            </View>
+          );
+        }}
       />
     </View>
   );
@@ -143,7 +158,7 @@ export default function TopicsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16 },
   title: { fontSize: 24, fontWeight: '700' },
-  meta: { fontSize: 13, marginTop: 6, marginBottom: 12 },
+  meta: { fontSize: 13, marginTop: 6, marginBottom: 12, color: '#666' },
 
   empty: { marginTop: 20, textAlign: 'center' },
 
@@ -159,4 +174,5 @@ const styles = StyleSheet.create({
   rowTitle: { fontSize: 15, fontWeight: '800' },
   rowSub: { marginTop: 4, fontSize: 12, opacity: 0.85 },
   smallBtn: { paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10 },
+  checkInBtn: { borderWidth: 1, borderColor: '#185FA5' },
 });

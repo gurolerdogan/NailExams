@@ -45,7 +45,7 @@ type PracticeRoute = RouteProp<AppTabParamList, 'Practice'>;
 
 // ─── Small reusable components ────────────────────────────────────────────────
 
-/** 5-bar confidence chart used on subject tiles */
+/** 5-bar confidence chart used on subject tiles — skips topics with confidence === 0 */
 function TileBars({ bars }: { bars: number[] }) {
   const max = Math.max(...bars, 1);
   return (
@@ -67,7 +67,7 @@ function TileBars({ bars }: { bars: number[] }) {
   );
 }
 
-/** Stepped bar row used on topic rows — filled up to confidence level */
+/** Stepped bar row used on topic rows — empty (all grey) when confidence is 0 */
 function TopicBars({ confidence }: { confidence: number }) {
   return (
     <View style={styles.topicBarsRow}>
@@ -77,7 +77,7 @@ function TopicBars({ confidence }: { confidence: number }) {
           style={[
             styles.topicBar,
             { height: 4 + i * 3 },
-            i < confidence
+            confidence > 0 && i < confidence
               ? { backgroundColor: CONF_BAR_COLORS[i] }
               : { backgroundColor: '#E0E0E0' },
           ]}
@@ -95,20 +95,24 @@ export default function PracticeScreen() {
   const subjectIdFromNav = route.params?.subjectId;
   const topicIdFromNav   = route.params?.topicId;
 
-  const [allTopics, setAllTopics]       = useState<Topic[]>([]);
+  const [allTopics, setAllTopics]             = useState<Topic[]>([]);
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
-  const [sheetTopic, setSheetTopic]     = useState<Topic | null>(null);   // topic open in bottom sheet
-  const [confidence, setConfidence]     = useState<1 | 2 | 3 | 4 | 5>(3);
-  const [note, setNote]                 = useState('');
-  const [busy, setBusy]                 = useState(false);
-  const [sheetVisible, setSheetVisible] = useState(false);
+  const [sheetTopic, setSheetTopic]           = useState<Topic | null>(null);
+  // null = no button pre-selected; user must pick a confidence level before saving
+  const [confidence, setConfidence]           = useState<1 | 2 | 3 | 4 | 5 | null>(null);
+  const [note, setNote]                       = useState('');
+  const [busy, setBusy]                       = useState(false);
+  const [sheetVisible, setSheetVisible]       = useState(false);
 
-  // Sheet slide-up animation
   const slideAnim = useRef(new Animated.Value(300)).current;
 
   const openSheet = useCallback((topic: Topic) => {
     setSheetTopic(topic);
-    setConfidence((topic.confidence ?? 3) as 1 | 2 | 3 | 4 | 5);
+    // Pre-select existing confidence if topic was previously checked in; otherwise no selection
+    const existing = topic.confidence && topic.confidence > 0
+      ? (topic.confidence as 1 | 2 | 3 | 4 | 5)
+      : null;
+    setConfidence(existing);
     setNote('');
     setSheetVisible(true);
     Animated.spring(slideAnim, {
@@ -130,7 +134,7 @@ export default function PracticeScreen() {
     });
   }, [slideAnim]);
 
-  // ── Load topics ──────────────────────────────────────────────────────────────
+  // ── Load topics ───────────────────────────────────────────────────────────────
   const refreshTopics = useCallback(async () => {
     const data = await loadTopics();
     setAllTopics(data);
@@ -139,7 +143,7 @@ export default function PracticeScreen() {
   useEffect(() => { void refreshTopics(); }, [refreshTopics]);
   useFocusEffect(useCallback(() => { void refreshTopics(); }, [refreshTopics]));
 
-  // ── Handle inbound nav params (from Home tile or Plan session) ───────────────
+  // ── Handle inbound nav params (from Home tile or Plan session) ────────────────
   const subjectsKey = useMemo(() => subjects.map((s) => s.id).join('|'), [subjects]);
 
   useEffect(() => {
@@ -152,21 +156,21 @@ export default function PracticeScreen() {
     });
   }, [subjectIdFromNav, subjectsKey]);
 
-  // If topicId also passed (from Plan), open the sheet directly once topics loaded
   useEffect(() => {
     if (!topicIdFromNav || allTopics.length === 0) return;
     const t = allTopics.find((x) => x.id === topicIdFromNav);
     if (t) openSheet(t);
   }, [topicIdFromNav, allTopics, openSheet]);
 
-  // ── Derived data ─────────────────────────────────────────────────────────────
+  // ── Derived data ──────────────────────────────────────────────────────────────
   const confidenceBySubject = useMemo(() => {
     const map = new Map<string, number[]>();
     for (const s of subjects) {
       const buckets = [0, 0, 0, 0, 0];
       for (const t of allTopics) {
         if (t.subjectId !== s.id) continue;
-        const c = t.confidence ?? 3;
+        const c = t.confidence ?? 0;
+        // Only count topics that have been checked in (confidence 1-5)
         if (c >= 1 && c <= 5) buckets[c - 1]++;
       }
       map.set(s.id, buckets);
@@ -183,7 +187,7 @@ export default function PracticeScreen() {
 
   // ── Save check-in ─────────────────────────────────────────────────────────────
   const submit = async () => {
-    if (busy || !selectedSubject || !sheetTopic) return;
+    if (busy || !selectedSubject || !sheetTopic || confidence === null) return;
 
     try {
       setBusy(true);
@@ -200,7 +204,6 @@ export default function PracticeScreen() {
 
       await appendAttempt(attempt);
 
-      // Update topic in local state + storage
       const idx = allTopics.findIndex((t) => t.id === sheetTopic.id);
       if (idx >= 0) {
         const updated: Topic = {
@@ -225,7 +228,6 @@ export default function PracticeScreen() {
       await refreshUserData();
       closeSheet();
     } catch (e: any) {
-      // Keep sheet open so user doesn't lose their note
       console.error('Check-in save failed', e);
     } finally {
       setBusy(false);
@@ -269,7 +271,6 @@ export default function PracticeScreen() {
   // ── Render: topic list ────────────────────────────────────────────────────────
   const renderTopicList = () => (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.topicHeader}>
         <Pressable onPress={() => setSelectedSubject(null)} style={styles.backBtn}>
           <Text style={styles.backText}>‹ Back</Text>
@@ -277,7 +278,6 @@ export default function PracticeScreen() {
         <Text style={styles.topicHeaderTitle} numberOfLines={1}>
           {selectedSubject?.name}
         </Text>
-        {/* spacer to centre title */}
         <View style={styles.backBtn} />
       </View>
 
@@ -289,25 +289,34 @@ export default function PracticeScreen() {
           <Text style={styles.emptyText}>No topics for this subject yet.</Text>
         }
         renderItem={({ item }) => {
-          const ci = (item.confidence ?? 3) - 1;
+          const isCheckedIn = (item.confidence ?? 0) > 0;
+          const ci = isCheckedIn ? (item.confidence as number) - 1 : 0;
           return (
             <Pressable style={styles.topicRow} onPress={() => openSheet(item)}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.topicName}>{item.name}</Text>
-                {item.lastPracticedAt ? (
+                {isCheckedIn && item.lastPracticedAt ? (
                   <Text style={styles.topicMeta}>
                     Last: {new Date(item.lastPracticedAt).toLocaleDateString()}
                   </Text>
                 ) : (
-                  <Text style={styles.topicMeta}>Never practiced</Text>
+                  <Text style={[styles.topicMeta, styles.topicMetaUnchecked]}>
+                    Not checked in
+                  </Text>
                 )}
               </View>
               <TopicBars confidence={item.confidence ?? 0} />
-              <View style={[styles.confPill, { backgroundColor: CONF_BG[ci] }]}>
-                <Text style={[styles.confPillText, { color: CONF_TEXT[ci] }]}>
-                  {`${item.confidence ?? '—'}/5`}
-                </Text>
-              </View>
+              {isCheckedIn ? (
+                <View style={[styles.confPill, { backgroundColor: CONF_BG[ci] }]}>
+                  <Text style={[styles.confPillText, { color: CONF_TEXT[ci] }]}>
+                    {`${item.confidence}/5`}
+                  </Text>
+                </View>
+              ) : (
+                <View style={[styles.confPill, styles.confPillUnchecked]}>
+                  <Text style={styles.confPillTextUnchecked}>–</Text>
+                </View>
+              )}
             </Pressable>
           );
         }}
@@ -331,16 +340,13 @@ export default function PracticeScreen() {
         <Animated.View
           style={[styles.sheet, { transform: [{ translateY: slideAnim }] }]}
         >
-          {/* Handle */}
           <View style={styles.sheetHandle} />
 
-          {/* Topic + subject */}
           <Text style={styles.sheetTopic} numberOfLines={2}>
             {sheetTopic?.name}
           </Text>
           <Text style={styles.sheetSubject}>{selectedSubject?.name}</Text>
 
-          {/* Confidence selector */}
           <Text style={styles.sheetLabel}>How confident are you?</Text>
           <View style={styles.confSelector}>
             {([1, 2, 3, 4, 5] as const).map((v) => {
@@ -365,7 +371,6 @@ export default function PracticeScreen() {
             })}
           </View>
 
-          {/* Note */}
           <Text style={styles.sheetLabel}>Note (optional)</Text>
           <TextInput
             value={note}
@@ -377,14 +382,19 @@ export default function PracticeScreen() {
             editable={!busy}
           />
 
-          {/* Save */}
           <Pressable
-            style={[styles.saveBtn, busy && { opacity: 0.6 }]}
+            style={[
+              styles.saveBtn,
+              (busy || confidence === null) && { opacity: 0.4 },
+            ]}
             onPress={submit}
-            disabled={busy}
+            disabled={busy || confidence === null}
           >
             <Text style={styles.saveBtnText}>{busy ? 'Saving…' : 'Save check-in'}</Text>
           </Pressable>
+          {confidence === null && (
+            <Text style={styles.saveHint}>Pick a confidence level to save</Text>
+          )}
         </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
@@ -412,7 +422,6 @@ const styles = StyleSheet.create({
     lineHeight: 30,
   },
 
-  // Subject grid
   subjectGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   subjectTile: { width: '47.5%', borderRadius: 16, padding: 12, paddingBottom: 10 },
   tileName: { fontSize: 13, fontWeight: '500', marginBottom: 8, lineHeight: 18 },
@@ -421,7 +430,6 @@ const styles = StyleSheet.create({
 
   emptyText: { textAlign: 'center', color: '#888', marginTop: 32, fontSize: 13 },
 
-  // Topic list header
   topicHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -440,7 +448,6 @@ const styles = StyleSheet.create({
     color: '#1C1C1E',
   },
 
-  // Topic rows
   topicListContent: { paddingHorizontal: 16, paddingBottom: 28 },
   topicRow: {
     backgroundColor: '#FFFFFF',
@@ -453,16 +460,23 @@ const styles = StyleSheet.create({
   },
   topicName: { fontSize: 13, fontWeight: '500', color: '#1C1C1E' },
   topicMeta: { fontSize: 11, color: '#AAA', marginTop: 2 },
+  topicMetaUnchecked: { color: '#C0C0C0', fontStyle: 'italic' },
   topicBarsRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 2, width: 40 },
   topicBar: { width: 6, borderRadius: 1 },
+
   confPill: {
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 20,
   },
   confPillText: { fontSize: 11, fontWeight: '500' },
+  confPillUnchecked: {
+    backgroundColor: '#F0F0F0',
+    borderWidth: 0.5,
+    borderColor: '#DDD',
+  },
+  confPillTextUnchecked: { fontSize: 11, fontWeight: '500', color: '#BBB' },
 
-  // Bottom sheet
   sheetOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -524,4 +538,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   saveBtnText: { color: '#FFF', fontSize: 14, fontWeight: '600' },
+  saveHint: {
+    textAlign: 'center',
+    fontSize: 11,
+    color: '#AAA',
+    marginTop: 8,
+  },
 });

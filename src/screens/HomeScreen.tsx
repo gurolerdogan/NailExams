@@ -19,7 +19,6 @@ import type { Topic } from '../types/models';
 import type { HomeStackParamList } from '../navigation/HomeNavigator';
 import type { AppTabParamList } from '../navigation/TabNavigator';
 
-// ─── Colour palette — one per subject slot, cycles if more than 8 subjects ───
 const TILE_PALETTE = [
   { bg: '#FAEEDA', text: '#633806' },
   { bg: '#FBEAF0', text: '#72243E' },
@@ -31,7 +30,6 @@ const TILE_PALETTE = [
   { bg: '#F3E8FF', text: '#5B21B6' },
 ];
 
-// Confidence level bar colours — red (1) → green (5)
 const CONF_BAR_COLORS = ['#E24B4A', '#EF9F27', '#FAC775', '#97C459', '#1D9E75'];
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
@@ -75,7 +73,7 @@ function dayNum(iso: string) {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-/** 5 bars showing topic count per confidence level (1–5), coloured red→green */
+/** Bars only reflect topics that have been checked in (confidence 1-5) */
 function ConfidenceBars({ bars }: { bars: number[] }) {
   const max = Math.max(...bars, 1);
   return (
@@ -90,7 +88,6 @@ function ConfidenceBars({ bars }: { bars: number[] }) {
               {
                 height: Math.max(4, Math.round(heightPct * 20)),
                 backgroundColor: CONF_BAR_COLORS[i],
-                // grey out bars with zero topics
                 opacity: count === 0 ? 0.2 : 1,
               },
             ]}
@@ -101,7 +98,7 @@ function ConfidenceBars({ bars }: { bars: number[] }) {
   );
 }
 
-// ─── Main screen ─────────────────────────────────────────────────────────────
+// ─── Main screen ──────────────────────────────────────────────────────────────
 
 type HomeMode = 'subjects' | 'plan';
 
@@ -133,15 +130,14 @@ export default function HomeScreen() {
 
   const level = profile?.examLevel ?? '—';
 
-  // ── Confidence bar data per subject ─────────────────────────────────────────
+  // Only count topics that have been checked in (confidence 1-5); ignore confidence === 0
   const confidenceBySubject = useMemo(() => {
     const map = new Map<string, number[]>();
     for (const s of subjects) {
-      // [count of conf=1, conf=2, conf=3, conf=4, conf=5]
       const buckets = [0, 0, 0, 0, 0];
       for (const t of allTopics) {
         if (t.subjectId !== s.id) continue;
-        const c = t.confidence ?? 3;
+        const c = t.confidence ?? 0;
         if (c >= 1 && c <= 5) buckets[c - 1]++;
       }
       map.set(s.id, buckets);
@@ -149,7 +145,6 @@ export default function HomeScreen() {
     return map;
   }, [subjects, allTopics]);
 
-  // ── Plan helpers ─────────────────────────────────────────────────────────────
   const planWeekDays = useMemo(() => {
     if (plan?.weekStart) return weekDates(plan.weekStart);
     return weekDates(toISODate(startOfWeekMonday()));
@@ -162,7 +157,6 @@ export default function HomeScreen() {
     return plan.sessions.filter((s) => s.date === selectedDate);
   }, [plan, planHasAny, selectedDate]);
 
-  // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Header */}
@@ -241,7 +235,6 @@ export default function HomeScreen() {
             </View>
           ) : (
             <>
-              {/* Week strip */}
               <View style={styles.weekStrip}>
                 {planWeekDays.map((d) => {
                   const active = d === selectedDate;
@@ -267,7 +260,6 @@ export default function HomeScreen() {
                 })}
               </View>
 
-              {/* Sessions for selected day */}
               <FlatList
                 data={sessionsForSelectedDay}
                 keyExtractor={(item) => item.id}
@@ -311,7 +303,6 @@ const styles = StyleSheet.create({
   appTitle: { fontSize: 32, fontWeight: '700', color: '#1C1C1E' },
   subTitle: { marginTop: 2, fontSize: 13, color: '#888', marginBottom: 16 },
 
-  // Pill switcher
   pillSwitcher: {
     flexDirection: 'row',
     backgroundColor: '#E0E0E8',
@@ -319,12 +310,7 @@ const styles = StyleSheet.create({
     padding: 3,
     marginBottom: 16,
   },
-  pill: {
-    flex: 1,
-    paddingVertical: 7,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
+  pill: { flex: 1, paddingVertical: 7, borderRadius: 8, alignItems: 'center' },
   pillActive: {
     backgroundColor: '#FFFFFF',
     shadowColor: '#000',
@@ -336,52 +322,23 @@ const styles = StyleSheet.create({
   pillText: { fontSize: 13, fontWeight: '500', color: '#888' },
   pillTextActive: { color: '#1C1C1E' },
 
-  // Subjects mode
   modeHeader: { alignItems: 'flex-end', marginBottom: 8 },
   manageLink: { fontSize: 12, fontWeight: '500', color: '#185FA5', textDecorationLine: 'underline' },
 
-  subjectGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  subjectTile: {
-    width: '47.5%',
-    borderRadius: 16,
-    padding: 12,
-    paddingBottom: 10,
-  },
-  tileName: {
-    fontSize: 13,
-    fontWeight: '500',
-    marginBottom: 8,
-    lineHeight: 18,
-  },
+  subjectGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  subjectTile: { width: '47.5%', borderRadius: 16, padding: 12, paddingBottom: 10 },
+  tileName: { fontSize: 13, fontWeight: '500', marginBottom: 8, lineHeight: 18 },
 
-  // Confidence bars
-  barsRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 3,
-    height: 24,
-  },
-  bar: {
-    flex: 1,
-    borderRadius: 2,
-  },
+  barsRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 24 },
+  bar: { flex: 1, borderRadius: 2 },
 
   emptyText: { textAlign: 'center', color: '#888', marginTop: 20, fontSize: 13 },
 
-  // Plan mode
   emptyPlan: { paddingVertical: 20, alignItems: 'center' },
   emptyTitle: { fontSize: 17, fontWeight: '600', color: '#1C1C1E', marginBottom: 6 },
   emptyBody: { fontSize: 13, color: '#888', textAlign: 'center', marginBottom: 16, lineHeight: 19 },
 
-  weekStrip: {
-    flexDirection: 'row',
-    gap: 5,
-    marginBottom: 12,
-  },
+  weekStrip: { flexDirection: 'row', gap: 5, marginBottom: 12 },
   dayPill: {
     flex: 1,
     backgroundColor: '#FFFFFF',
@@ -391,14 +348,8 @@ const styles = StyleSheet.create({
     borderWidth: 0.5,
     borderColor: '#DDDDE0',
   },
-  dayPillActive: {
-    backgroundColor: '#1C1C1E',
-    borderColor: '#1C1C1E',
-  },
-  dayPillToday: {
-    borderColor: '#185FA5',
-    borderWidth: 1.5,
-  },
+  dayPillActive: { backgroundColor: '#1C1C1E', borderColor: '#1C1C1E' },
+  dayPillToday: { borderColor: '#185FA5', borderWidth: 1.5 },
   dayText: { fontSize: 10, fontWeight: '500', color: '#888' },
   dayNum: { fontSize: 13, fontWeight: '500', color: '#1C1C1E' },
   dayTextActive: { color: '#FFFFFF' },
