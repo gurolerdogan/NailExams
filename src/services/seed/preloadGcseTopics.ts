@@ -18,7 +18,6 @@ export async function preloadGcseTopicsForSubjects(params: {
 
   const existingAll = await loadTopics();
 
-  // Build a lookup to prevent duplicates: subjectId + normalizedName
   const existingKey = new Set<string>();
   for (const t of existingAll) {
     existingKey.add(`${t.subjectId}::${normalize(t.name)}`);
@@ -40,7 +39,7 @@ export async function preloadGcseTopicsForSubjects(params: {
         id: uuid(),
         subjectId: subj.id,
         name: topicName,
-        confidence: 3,
+        confidence: 0, // topics start unchecked — user must check in to set a level
         createdAt: ts,
         updatedAt: ts,
       });
