@@ -1,87 +1,125 @@
 import type { Subject, Topic } from '../../types/models';
-import type { WeeklyPlan, PlanSession } from '../../types/plan';
+import type { WeeklyPlan, PlanSession, PlanConfig } from '../../types/plan';
 import { uuid } from '../../utils/id';
 import { now } from '../../utils/time';
 
 function toISODate(d: Date): string {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return `${y}-${m}-${day}`;
 }
 
-// Monday as week start
-function startOfWeekMonday(date = new Date()): Date {
-  const d = new Date(date);
-  const day = d.getDay(); // 0 Sun, 1 Mon
-  const diff = (day === 0 ? -6 : 1 - day);
-  d.setDate(d.getDate() + diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
+function topicSortKey(t: Topic): number {
+  // confidence 0 first (never checked in), then 1–5; ties broken by oldest practice
+  return (t.confidence ?? 0) * 1_000_000_000 + (t.lastPracticedAt ?? 0);
 }
 
-function topicPriority(t: Topic): number {
-  // Lower score = higher priority
-  const confidence = t.confidence ?? 0; // unknown treated as 0 (high priority)
-  const last = t.lastPracticedAt ?? 0;
-
-  // confidence weight dominates; lastPracticedAt breaks ties
-  // recent practice => higher last => slightly lower priority
-  return confidence * 1_000_000_000 + (last === 0 ? 0 : last);
-}
-
-export function generateWeeklyPlan(params: {
+export function generatePlan(params: {
   subjects: Subject[];
   topics: Topic[];
-  sessionsPerDay: number; // 1 or 2
+  config: PlanConfig;
 }): WeeklyPlan {
-  const { subjects, topics, sessionsPerDay } = params;
+  const { subjects, topics, config } = params;
+  const { durationDays, subjectIds, topicsPerDay, topicOrder } = config;
 
   const ts = now();
-  const weekStartDate = startOfWeekMonday();
-  const weekStart = toISODate(weekStartDate);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const planStart = toISODate(today);
 
   const subjectById = new Map(subjects.map((s) => [s.id, s]));
-
-  // Only include topics whose subject exists
-  const candidates = topics
-    .filter((t) => subjectById.has(t.subjectId))
-    .sort((a, b) => topicPriority(a) - topicPriority(b));
-
-  const totalSessions = 7 * sessionsPerDay;
-  const chosen = candidates.slice(0, totalSessions);
+  const selectedSubjects = subjectIds
+    .map((id) => subjectById.get(id))
+    .filter((s): s is Subject => !!s);
 
   const sessions: PlanSession[] = [];
 
-  for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
-    for (let s = 0; s < sessionsPerDay; s++) {
-      const idx = dayIndex * sessionsPerDay + s;
-      const topic = chosen[idx];
-      if (!topic) break;
+  if (topicOrder === 'subjects-first') {
+    // Flat list: all topics from S0 (sorted), then S1, then S2 …
+    const orderedTopics: Topic[] = [];
+    for (const subject of selectedSubjects) {
+      topics
+        .filter((t) => t.subjectId === subject.id)
+        .sort((a, b) => topicSortKey(a) - topicSortKey(b))
+        .forEach((t) => orderedTopics.push(t));
+    }
 
-      const day = new Date(weekStartDate);
-      day.setDate(weekStartDate.getDate() + dayIndex);
+    let idx = 0;
+    outer: for (let day = 0; day < durationDays; day++) {
+      const date = new Date(today);
+      date.setDate(today.getDate() + day);
+      const dateISO = toISODate(date);
 
-      const subject = subjectById.get(topic.subjectId)!;
+      for (let slot = 0; slot < topicsPerDay; slot++) {
+        if (idx >= orderedTopics.length) break outer;
+        const topic = orderedTopics[idx++];
+        const subject = subjectById.get(topic.subjectId)!;
+        sessions.push(makeSession(dateISO, subject, topic, ts));
+      }
+    }
+  } else {
+    // Round-robin: cycle through subject queues one slot at a time
+    const queues: Topic[][] = selectedSubjects.map((subject) =>
+      topics
+        .filter((t) => t.subjectId === subject.id)
+        .sort((a, b) => topicSortKey(a) - topicSortKey(b)),
+    );
+    const numSubjects = selectedSubjects.length;
+    let globalSlot = 0;
 
-      sessions.push({
-        id: uuid(),
-        date: toISODate(day),
-        subjectId: subject.id,
-        topicId: topic.id,
-        title: `${subject.name} — ${topic.name}`,
-        status: 'PLANNED',
-        createdAt: ts,
-        updatedAt: ts,
-      });
+    outer: for (let day = 0; day < durationDays; day++) {
+      const date = new Date(today);
+      date.setDate(today.getDate() + day);
+      const dateISO = toISODate(date);
+
+      for (let slot = 0; slot < topicsPerDay; slot++) {
+        // Find next non-exhausted queue, cycling from globalSlot
+        let picked = false;
+        for (let attempt = 0; attempt < numSubjects; attempt++) {
+          const qi = (globalSlot + attempt) % numSubjects;
+          if (queues[qi].length > 0) {
+            const topic = queues[qi].shift()!;
+            const subject = selectedSubjects[qi];
+            sessions.push(makeSession(dateISO, subject, topic, ts));
+            globalSlot = (qi + 1) % numSubjects;
+            picked = true;
+            break;
+          }
+        }
+        if (!picked) break outer; // all queues exhausted
+      }
     }
   }
 
   return {
     id: uuid(),
-    weekStart,
-    sessionsPerDay,
+    planStart,
+    weekStart: planStart,
+    durationDays,
+    subjectIds,
+    topicsPerDay,
+    topicOrder,
+    sessionsPerDay: topicsPerDay,
     sessions,
+    createdAt: ts,
+    updatedAt: ts,
+  };
+}
+
+function makeSession(
+  date: string,
+  subject: Subject,
+  topic: Topic,
+  ts: number,
+): PlanSession {
+  return {
+    id: uuid(),
+    date,
+    subjectId: subject.id,
+    topicId: topic.id,
+    title: `${subject.name} — ${topic.name}`,
+    status: 'PLANNED',
     createdAt: ts,
     updatedAt: ts,
   };

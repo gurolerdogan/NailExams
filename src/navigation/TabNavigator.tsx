@@ -1,16 +1,18 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import type { NavigatorScreenParams } from '@react-navigation/native';
 
 import HomeNavigator from './HomeNavigator';
 import PracticeScreen from '../screens/PracticeScreen';
 import PlanScreen from '../screens/PlanScreen';
 import SettingsNavigator from './SettingsNavigator';
+import type { SettingsStackParamList } from './SettingsNavigator';
 
 export type AppTabParamList = {
   Home: undefined;
-  Practice: { subjectId?: string; topicId?: string } | undefined; // topicId added for Plan → Practice deep link
+  Practice: { subjectId?: string; topicId?: string } | undefined;
   Plan: undefined;
-  Settings: undefined;
+  Settings: NavigatorScreenParams<SettingsStackParamList> | undefined;
 };
 
 const Tab = createBottomTabNavigator<AppTabParamList>();

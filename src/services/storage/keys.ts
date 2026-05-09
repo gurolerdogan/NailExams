@@ -7,6 +7,7 @@ export const STORAGE_KEYS = {
   logsV1: 'NE_LOGS_V1',
   attemptsV1: 'NE_ATTEMPTS_V1',
   planV1: 'NE_PLAN_V1',
+  planSettingsV1: 'NE_PLAN_SETTINGS_V1',
 } as const;
 
 export const CURRENT_STORAGE_VERSION = 1;

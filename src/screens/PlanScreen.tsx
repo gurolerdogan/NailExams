@@ -13,11 +13,8 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 
 import { useAuth } from '../context/AuthContext';
-import type { Topic } from '../types/models';
 import type { WeeklyPlan } from '../types/plan';
-import { loadTopics } from '../services/storage/nailexamsStorage';
 import { loadPlan, savePlan, clearPlan } from '../services/storage/planStorage';
-import { generateWeeklyPlan } from '../services/plan/generateWeeklyPlan';
 import { now } from '../utils/time';
 import { logEvent } from '../services/logging/logEvent';
 import type { AppTabParamList } from '../navigation/TabNavigator';
@@ -99,10 +96,8 @@ export default function PlanScreen() {
   const { subjects } = useAuth();
   const tabNav = useNavigation<BottomTabNavigationProp<AppTabParamList>>();
 
-  const [topics, setTopics]             = useState<Topic[]>([]);
-  const [plan, setPlan]                 = useState<WeeklyPlan | null>(null);
-  const [sessionsPerDay, setSessionsPerDay] = useState<1 | 2>(1);
-  const [busy, setBusy]                 = useState(false);
+  const [plan, setPlan] = useState<WeeklyPlan | null>(null);
+  const [busy, setBusy] = useState(false);
 
   // Calendar state
   const today = useMemo(() => new Date(), []);
@@ -114,19 +109,14 @@ export default function PlanScreen() {
 
   // ── Load ─────────────────────────────────────────────────────────────────────
   const load = useCallback(async () => {
-    const [t, p] = await Promise.all([loadTopics(), loadPlan()]);
-    setTopics(t);
+    const p = await loadPlan();
     setPlan(p);
-    if (p?.sessionsPerDay === 2) setSessionsPerDay(2);
-    else setSessionsPerDay(1);
   }, []);
 
   useEffect(() => { void load(); }, [load]);
   useFocusEffect(useCallback(() => { void load(); }, [load]));
 
   // ── Derived ──────────────────────────────────────────────────────────────────
-  const canGenerate = subjects.length > 0 && topics.length > 0;
-
   const streak = useMemo(() => plan ? computeStreak(plan.sessions) : 0, [plan]);
 
   const doneCount  = useMemo(() => plan?.sessions.filter((s) => s.status === 'DONE').length ?? 0, [plan]);
@@ -168,25 +158,14 @@ export default function PlanScreen() {
   }, [plan, subjectPaletteIdx]);
 
   // ── Actions ──────────────────────────────────────────────────────────────────
-  const onGenerate = useCallback(async () => {
-    if (busy || !canGenerate) return;
-    try {
-      setBusy(true);
-      const next = generateWeeklyPlan({ subjects, topics, sessionsPerDay });
-      await savePlan(next);
-      setPlan(next);
-      await logEvent('plan_generated', { weekStart: next.weekStart, sessions: next.sessions.length });
-    } catch (e: any) {
-      Alert.alert('Generate failed', String(e?.message ?? e));
-    } finally {
-      setBusy(false);
-    }
-  }, [busy, canGenerate, subjects, topics, sessionsPerDay]);
+  const goToPlanSettings = useCallback(() => {
+    tabNav.navigate('Settings', { screen: 'PlanSettings' });
+  }, [tabNav]);
 
   const onRegenerate = () => {
-    Alert.alert('Regenerate plan?', 'This will overwrite the current plan.', [
+    Alert.alert('Edit plan?', 'Go to Plan Settings to change your plan configuration and regenerate.', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Regenerate', style: 'destructive', onPress: () => void onGenerate() },
+      { text: 'Go to Plan Settings', onPress: goToPlanSettings },
     ]);
   };
 
@@ -261,39 +240,15 @@ export default function PlanScreen() {
 
   const todayISO = toISODate(today);
 
-  // ── Render: generate card ─────────────────────────────────────────────────────
-  const renderGenerateCard = () => (
+  // ── Render: empty state ───────────────────────────────────────────────────────
+  const renderEmptyState = () => (
     <View style={styles.generateCard}>
-      <Text style={styles.genTitle}>Generate your weekly plan</Text>
+      <Text style={styles.genTitle}>No plan yet</Text>
       <Text style={styles.genSub}>
-        Topics are spread across the week, prioritising lower confidence first.
+        Set up your study plan — choose duration, subjects, and how topics are picked.
       </Text>
-      <View style={styles.genRow}>
-        <Text style={styles.genLabel}>Sessions per day</Text>
-        <View style={styles.genToggle}>
-          <Pressable
-            style={[styles.genOpt, sessionsPerDay === 1 && styles.genOptActive]}
-            onPress={() => setSessionsPerDay(1)}
-          >
-            <Text style={[styles.genOptText, sessionsPerDay === 1 && styles.genOptTextActive]}>1</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.genOpt, sessionsPerDay === 2 && styles.genOptActive]}
-            onPress={() => setSessionsPerDay(2)}
-          >
-            <Text style={[styles.genOptText, sessionsPerDay === 2 && styles.genOptTextActive]}>2</Text>
-          </Pressable>
-        </View>
-      </View>
-      {!canGenerate && (
-        <Text style={styles.genWarning}>Add subjects and topics first.</Text>
-      )}
-      <Pressable
-        style={[styles.genBtn, (!canGenerate || busy) && { opacity: 0.5 }]}
-        onPress={onGenerate}
-        disabled={!canGenerate || busy}
-      >
-        <Text style={styles.genBtnText}>{busy ? 'Generating…' : 'Generate plan'}</Text>
+      <Pressable style={styles.genBtn} onPress={goToPlanSettings}>
+        <Text style={styles.genBtnText}>Set up plan →</Text>
       </Pressable>
     </View>
   );
@@ -472,7 +427,7 @@ export default function PlanScreen() {
       </Text>
 
       {!plan ? (
-        renderGenerateCard()
+        renderEmptyState()
       ) : (
         <>
           {renderSummary()}
@@ -492,32 +447,21 @@ const styles = StyleSheet.create({
   screenTitle: { fontSize: 22, fontWeight: '600', color: '#1C1C1E', marginBottom: 2 },
   screenSub: { fontSize: 12, color: '#888', marginBottom: 16 },
 
-  // Generate card
+  // Empty state / generate card
   generateCard: {
     backgroundColor: '#FFF',
     borderRadius: 16,
-    padding: 16,
+    padding: 20,
     marginBottom: 12,
+    alignItems: 'center',
   },
-  genTitle: { fontSize: 15, fontWeight: '600', color: '#1C1C1E', marginBottom: 4 },
-  genSub: { fontSize: 12, color: '#888', marginBottom: 14, lineHeight: 18 },
-  genRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  genLabel: { flex: 1, fontSize: 13, color: '#555' },
-  genToggle: {
-    flexDirection: 'row',
-    backgroundColor: '#F0F0F5',
-    borderRadius: 8,
-    padding: 2,
-  },
-  genOpt: { paddingHorizontal: 14, paddingVertical: 5, borderRadius: 6 },
-  genOptActive: { backgroundColor: '#FFF', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
-  genOptText: { fontSize: 13, fontWeight: '500', color: '#888' },
-  genOptTextActive: { color: '#1C1C1E' },
-  genWarning: { fontSize: 12, color: '#E24B4A', marginBottom: 10 },
+  genTitle: { fontSize: 17, fontWeight: '600', color: '#1C1C1E', marginBottom: 6 },
+  genSub: { fontSize: 13, color: '#888', marginBottom: 20, lineHeight: 19, textAlign: 'center' },
   genBtn: {
     backgroundColor: '#1C1C1E',
     borderRadius: 12,
     paddingVertical: 12,
+    paddingHorizontal: 24,
     alignItems: 'center',
   },
   genBtnText: { color: '#FFF', fontSize: 14, fontWeight: '500' },

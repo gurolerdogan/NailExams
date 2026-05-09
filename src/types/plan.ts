@@ -9,10 +9,24 @@ export type PlanSession = {
   updatedAt: number;
 };
 
+export type TopicOrder = 'subjects-first' | 'round-robin';
+
+export type PlanConfig = {
+  durationDays: 30 | 60 | 90;
+  subjectIds: string[];
+  topicsPerDay: 1 | 2 | 3 | 4;
+  topicOrder: TopicOrder;
+};
+
 export type WeeklyPlan = {
   id: string;
-  weekStart: string; // YYYY-MM-DD for Monday
-  sessionsPerDay: number; // 1 or 2 for MVP
+  planStart: string;    // YYYY-MM-DD — today when generated
+  weekStart: string;    // kept for calendar compat, equals planStart
+  durationDays: number;
+  subjectIds: string[];
+  topicsPerDay: number;
+  topicOrder: TopicOrder;
+  sessionsPerDay: number; // mirrors topicsPerDay, kept for compat
   sessions: PlanSession[];
   createdAt: number;
   updatedAt: number;
