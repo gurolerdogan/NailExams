@@ -65,13 +65,7 @@ export async function clearOnboardingDone(): Promise<void> {
 
 // Wipe all NailExams local data (for Settings reset)
 export async function wipeAll(): Promise<void> {
-  await Promise.all([
-    removeKey(STORAGE_KEYS.profileV1),
-    removeKey(STORAGE_KEYS.subjectsV1),
-    removeKey(STORAGE_KEYS.topicsV1),
-    removeKey(STORAGE_KEYS.onboardingDone),
-    removeKey(STORAGE_KEYS.storageVersion),
-    removeKey(STORAGE_KEYS.attemptsV1),
-    removeKey(STORAGE_KEYS.planV1),
-  ]);
+  await Promise.all(
+    Object.values(STORAGE_KEYS).map((key) => removeKey(key)),
+  );
 }

@@ -18,6 +18,7 @@ import { loadPlan, savePlan, clearPlan } from '../services/storage/planStorage';
 import { now } from '../utils/time';
 import { logEvent } from '../services/logging/logEvent';
 import type { AppTabParamList } from '../navigation/TabNavigator';
+import EmptyState from '../components/EmptyState';
 
 // ─── Subject colour palette (must stay in sync with Home + Practice) ──────────
 const TILE_PALETTE = [
@@ -242,15 +243,13 @@ export default function PlanScreen() {
 
   // ── Render: empty state ───────────────────────────────────────────────────────
   const renderEmptyState = () => (
-    <View style={styles.generateCard}>
-      <Text style={styles.genTitle}>No plan yet</Text>
-      <Text style={styles.genSub}>
-        Set up your study plan — choose duration, subjects, and how topics are picked.
-      </Text>
-      <Pressable style={styles.genBtn} onPress={goToPlanSettings}>
-        <Text style={styles.genBtnText}>Set up plan →</Text>
-      </Pressable>
-    </View>
+    <EmptyState
+      icon="calendar-outline"
+      title="No plan yet"
+      body="Set up your study plan — choose duration, subjects, and how topics are picked."
+      cta="Set up plan"
+      onCta={goToPlanSettings}
+    />
   );
 
   // ── Render: summary row ───────────────────────────────────────────────────────
@@ -446,25 +445,6 @@ const styles = StyleSheet.create({
 
   screenTitle: { fontSize: 22, fontWeight: '600', color: '#1C1C1E', marginBottom: 2 },
   screenSub: { fontSize: 12, color: '#888', marginBottom: 16 },
-
-  // Empty state / generate card
-  generateCard: {
-    backgroundColor: '#FFF',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 12,
-    alignItems: 'center',
-  },
-  genTitle: { fontSize: 17, fontWeight: '600', color: '#1C1C1E', marginBottom: 6 },
-  genSub: { fontSize: 13, color: '#888', marginBottom: 20, lineHeight: 19, textAlign: 'center' },
-  genBtn: {
-    backgroundColor: '#1C1C1E',
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-  },
-  genBtnText: { color: '#FFF', fontSize: 14, fontWeight: '500' },
 
   // Summary row
   summaryRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },

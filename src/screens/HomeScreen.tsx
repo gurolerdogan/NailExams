@@ -16,6 +16,7 @@ import { loadTopics } from '../services/storage/nailexamsStorage';
 import type { WeeklyPlan } from '../types/plan';
 import type { Topic } from '../types/models';
 import type { AppTabParamList } from '../navigation/TabNavigator';
+import EmptyState from '../components/EmptyState';
 
 const TILE_PALETTE = [
   { bg: '#FAEEDA', text: '#633806' },
@@ -116,16 +117,19 @@ export default function HomeScreen() {
 
   const level = profile?.examLevel ?? '—';
 
-  const confidenceBySubject = useMemo(() => {
-    const map = new Map<string, number[]>();
+  const subjectStats = useMemo(() => {
+    const map = new Map<string, { bars: number[]; checkedIn: number; total: number }>();
     for (const s of subjects) {
       const buckets = [0, 0, 0, 0, 0];
+      let checkedIn = 0;
+      let total = 0;
       for (const t of allTopics) {
         if (t.subjectId !== s.id) continue;
+        total++;
         const c = t.confidence ?? 0;
-        if (c >= 1 && c <= 5) buckets[c - 1]++;
+        if (c >= 1 && c <= 5) { buckets[c - 1]++; checkedIn++; }
       }
-      map.set(s.id, buckets);
+      map.set(s.id, { bars: buckets, checkedIn, total });
     }
     return map;
   }, [subjects, allTopics]);
@@ -166,18 +170,28 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
+      <Text style={styles.modeHint}>
+        {mode === 'subjects'
+          ? 'Tap a subject to review topics and check in your confidence.'
+          : 'Your scheduled revision sessions — tap a session to start practising.'}
+      </Text>
+
       {/* ── SUBJECTS MODE ── */}
       {mode === 'subjects' && (
         <View>
           {subjects.length === 0 ? (
-            <Text style={styles.emptyText}>
-              No subjects yet. Go to Settings → Edit subjects to add some.
-            </Text>
+            <EmptyState
+              icon="library-outline"
+              title="No subjects yet"
+              body="Add your GCSE subjects to start tracking your confidence."
+              cta="Edit subjects"
+              onCta={() => tabNav.navigate('Settings', { screen: 'EditSubjects' })}
+            />
           ) : (
             <View style={styles.subjectGrid}>
               {subjects.map((s, idx) => {
                 const palette = TILE_PALETTE[idx % TILE_PALETTE.length];
-                const bars = confidenceBySubject.get(s.id) ?? [0, 0, 0, 0, 0];
+                const stats = subjectStats.get(s.id) ?? { bars: [0,0,0,0,0], checkedIn: 0, total: 0 };
                 return (
                   <Pressable
                     key={s.id}
@@ -187,7 +201,12 @@ export default function HomeScreen() {
                     <Text style={[styles.tileName, { color: palette.text }]} numberOfLines={2}>
                       {s.name}
                     </Text>
-                    <ConfidenceBars bars={bars} />
+                    <View style={styles.tileFooter}>
+                      <ConfidenceBars bars={stats.bars} />
+                      <Text style={[styles.tileProgress, { color: palette.text }]}>
+                        {stats.checkedIn}/{stats.total}
+                      </Text>
+                    </View>
                   </Pressable>
                 );
               })}
@@ -200,15 +219,13 @@ export default function HomeScreen() {
       {mode === 'plan' && (
         <View>
           {!planHasAny ? (
-            <View style={styles.emptyPlan}>
-              <Text style={styles.emptyTitle}>No study plan yet</Text>
-              <Text style={styles.emptyBody}>
-                Head to the Plan tab to generate your weekly study plan.
-              </Text>
-              <Pressable style={styles.goBtn} onPress={() => tabNav.navigate('Plan')}>
-                <Text style={styles.goBtnText}>Go to Plan</Text>
-              </Pressable>
-            </View>
+            <EmptyState
+              icon="calendar-outline"
+              title="No study plan yet"
+              body="Set up your plan in Plan Settings to schedule your revision sessions."
+              cta="Set up plan"
+              onCta={() => tabNav.navigate('Settings', { screen: 'PlanSettings' })}
+            />
           ) : (
             <>
               <View style={styles.weekStrip}>
@@ -260,8 +277,8 @@ export default function HomeScreen() {
                 }}
               />
 
-              <Pressable style={styles.goBtn} onPress={() => tabNav.navigate('Plan')}>
-                <Text style={styles.goBtnText}>Open full plan →</Text>
+              <Pressable style={styles.openPlanBtn} onPress={() => tabNav.navigate('Plan')}>
+                <Text style={styles.openPlanBtnText}>Open full plan →</Text>
               </Pressable>
             </>
           )}
@@ -297,17 +314,20 @@ const styles = StyleSheet.create({
   pillText: { fontSize: 13, fontWeight: '500', color: '#888' },
   pillTextActive: { color: '#1C1C1E' },
 
+  modeHint: {
+    fontSize: 12,
+    color: '#AAA',
+    marginBottom: 14,
+    lineHeight: 17,
+  },
+
   subjectGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   subjectTile: { width: '47.5%', borderRadius: 16, padding: 12, paddingBottom: 10 },
   tileName: { fontSize: 13, fontWeight: '500', marginBottom: 8, lineHeight: 18 },
-  barsRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 24 },
+  tileFooter: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
+  barsRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 24, flex: 1 },
   bar: { flex: 1, borderRadius: 2 },
-
-  emptyText: { textAlign: 'center', color: '#888', marginTop: 20, fontSize: 13, lineHeight: 20 },
-
-  emptyPlan: { paddingVertical: 20, alignItems: 'center' },
-  emptyTitle: { fontSize: 17, fontWeight: '600', color: '#1C1C1E', marginBottom: 6 },
-  emptyBody: { fontSize: 13, color: '#888', textAlign: 'center', marginBottom: 16, lineHeight: 19 },
+  tileProgress: { fontSize: 11, fontWeight: '600', opacity: 0.6, paddingBottom: 2 },
 
   weekStrip: { flexDirection: 'row', gap: 5, marginBottom: 12 },
   dayPill: {
@@ -343,12 +363,12 @@ const styles = StyleSheet.create({
   badgePlanned: { backgroundColor: '#FEF9C3', color: '#854D0E' },
   emptySmall: { textAlign: 'center', color: '#AAA', marginVertical: 12, fontSize: 13 },
 
-  goBtn: {
+  openPlanBtn: {
     backgroundColor: '#1C1C1E',
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: 'center',
     marginTop: 4,
   },
-  goBtnText: { color: '#FFFFFF', fontSize: 13, fontWeight: '500' },
+  openPlanBtnText: { color: '#FFFFFF', fontSize: 13, fontWeight: '500' },
 });

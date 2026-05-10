@@ -12,8 +12,9 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useFocusEffect, useRoute } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 
 import { useAuth } from '../context/AuthContext';
 import type { Subject, Topic } from '../types/models';
@@ -24,6 +25,7 @@ import { uuid } from '../utils/id';
 import { now } from '../utils/time';
 import { logEvent } from '../services/logging/logEvent';
 import type { AppTabParamList } from '../navigation/TabNavigator';
+import EmptyState from '../components/EmptyState';
 
 // ─── Shared palette (must stay in sync with HomeScreen) ──────────────────────
 const TILE_PALETTE = [
@@ -91,6 +93,7 @@ function TopicBars({ confidence }: { confidence: number }) {
 export default function PracticeScreen() {
   const { subjects, refreshUserData } = useAuth();
   const route = useRoute<PracticeRoute>();
+  const tabNav = useNavigation<BottomTabNavigationProp<AppTabParamList>>();
 
   const subjectIdFromNav = route.params?.subjectId;
   const topicIdFromNav   = route.params?.topicId;
@@ -244,7 +247,13 @@ export default function PracticeScreen() {
       <Text style={styles.screenTitle}>What are you{'\n'}studying today?</Text>
 
       {subjects.length === 0 ? (
-        <Text style={styles.emptyText}>No subjects yet. Add some in Settings.</Text>
+        <EmptyState
+          icon="library-outline"
+          title="No subjects yet"
+          body="Add your GCSE subjects to see topics and start checking in."
+          cta="Edit subjects"
+          onCta={() => tabNav.navigate('Settings', { screen: 'EditSubjects' })}
+        />
       ) : (
         <View style={styles.subjectGrid}>
           {subjects.map((s, idx) => {
@@ -286,7 +295,11 @@ export default function PracticeScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.topicListContent}
         ListEmptyComponent={
-          <Text style={styles.emptyText}>No topics for this subject yet.</Text>
+          <EmptyState
+            icon="list-outline"
+            title="No topics yet"
+            body="Topics for this subject haven't been loaded. Try resetting from Settings."
+          />
         }
         renderItem={({ item }) => {
           const isCheckedIn = (item.confidence ?? 0) > 0;
@@ -427,8 +440,6 @@ const styles = StyleSheet.create({
   tileName: { fontSize: 13, fontWeight: '500', marginBottom: 8, lineHeight: 18 },
   barsRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 24 },
   tileBar: { flex: 1, borderRadius: 2 },
-
-  emptyText: { textAlign: 'center', color: '#888', marginTop: 32, fontSize: 13 },
 
   topicHeader: {
     flexDirection: 'row',

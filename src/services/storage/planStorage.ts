@@ -3,7 +3,11 @@ import { STORAGE_KEYS } from './keys';
 import type { WeeklyPlan, PlanConfig } from '../../types/plan';
 
 export async function loadPlan(): Promise<WeeklyPlan | null> {
-  return getJson<WeeklyPlan | null>(STORAGE_KEYS.planV1, null);
+  const raw = await getJson<WeeklyPlan | null>(STORAGE_KEYS.planV1, null);
+  if (!raw) return null;
+  // Guard against old schema (pre-refactor plans lack planStart / topicOrder)
+  if (!raw.planStart || !raw.topicOrder) return null;
+  return raw;
 }
 
 export async function savePlan(plan: WeeklyPlan): Promise<void> {
@@ -22,7 +26,17 @@ const DEFAULT_CONFIG: PlanConfig = {
 };
 
 export async function loadPlanConfig(): Promise<PlanConfig> {
-  return getJson<PlanConfig>(STORAGE_KEYS.planSettingsV1, DEFAULT_CONFIG);
+  const raw = await getJson<Partial<PlanConfig>>(STORAGE_KEYS.planSettingsV1, {});
+  // Guard against old schema (pre-refactor settings only had sessionsPerDay)
+  if (
+    !raw.durationDays ||
+    !Array.isArray(raw.subjectIds) ||
+    !raw.topicsPerDay ||
+    !raw.topicOrder
+  ) {
+    return DEFAULT_CONFIG;
+  }
+  return raw as PlanConfig;
 }
 
 export async function savePlanConfig(config: PlanConfig): Promise<void> {
