@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
-  FlatList,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -100,6 +99,7 @@ export default function PracticeScreen() {
 
   const [allTopics, setAllTopics]             = useState<Topic[]>([]);
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
+  const [collapsedDomains, setCollapsedDomains] = useState<Set<string>>(new Set());
   const [sheetTopic, setSheetTopic]           = useState<Topic | null>(null);
   // null = no button pre-selected; user must pick a confidence level before saving
   const [confidence, setConfidence]           = useState<1 | 2 | 3 | 4 | 5 | null>(null);
@@ -183,10 +183,28 @@ export default function PracticeScreen() {
 
   const subjectTopics = useMemo(() => {
     if (!selectedSubject) return [];
-    return allTopics
-      .filter((t) => t.subjectId === selectedSubject.id)
-      .sort((a, b) => a.name.localeCompare(b.name));
+    return allTopics.filter((t) => t.subjectId === selectedSubject.id);
   }, [allTopics, selectedSubject]);
+
+  // Group topics by domain prefix ("Domain: topic name" → domain = "Domain")
+  const groupedTopics = useMemo(() => {
+    const groups = new Map<string, Topic[]>();
+    for (const topic of subjectTopics) {
+      const colonIdx = topic.name.indexOf(': ');
+      const domain = colonIdx === -1 ? 'General' : topic.name.slice(0, colonIdx);
+      const list = groups.get(domain) ?? [];
+      list.push(topic);
+      groups.set(domain, list);
+    }
+    return Array.from(groups.entries()).map(([domain, topics]) => ({ domain, topics }));
+  }, [subjectTopics]);
+
+  const toggleDomain = (domain: string) =>
+    setCollapsedDomains((prev) => {
+      const next = new Set(prev);
+      next.has(domain) ? next.delete(domain) : next.add(domain);
+      return next;
+    });
 
   // ── Save check-in ─────────────────────────────────────────────────────────────
   const submit = async () => {
@@ -278,64 +296,124 @@ export default function PracticeScreen() {
   );
 
   // ── Render: topic list ────────────────────────────────────────────────────────
-  const renderTopicList = () => (
-    <View style={styles.container}>
-      <View style={styles.topicHeader}>
-        <Pressable onPress={() => setSelectedSubject(null)} style={styles.backBtn}>
-          <Text style={styles.backText}>‹ Back</Text>
-        </Pressable>
-        <Text style={styles.topicHeaderTitle} numberOfLines={1}>
-          {selectedSubject?.name}
-        </Text>
-        <View style={styles.backBtn} />
-      </View>
+  const renderTopicList = () => {
+    const total     = subjectTopics.length;
+    const checkedIn = subjectTopics.filter((t) => (t.confidence ?? 0) > 0).length;
+    const showDomainHeaders = groupedTopics.length > 1;
 
-      <FlatList
-        data={subjectTopics}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.topicListContent}
-        ListEmptyComponent={
+    return (
+      <View style={styles.container}>
+        <View style={styles.topicHeader}>
+          <Pressable onPress={() => setSelectedSubject(null)} style={styles.backBtn}>
+            <Text style={styles.backText}>‹ Back</Text>
+          </Pressable>
+          <Text style={styles.topicHeaderTitle} numberOfLines={1}>
+            {selectedSubject?.name}
+          </Text>
+          <View style={styles.backBtn} />
+        </View>
+
+        {total === 0 ? (
           <EmptyState
             icon="list-outline"
             title="No topics yet"
             body="Topics for this subject haven't been loaded. Try resetting from Settings."
           />
-        }
-        renderItem={({ item }) => {
-          const isCheckedIn = (item.confidence ?? 0) > 0;
-          const ci = isCheckedIn ? (item.confidence as number) - 1 : 0;
-          return (
-            <Pressable style={styles.topicRow} onPress={() => openSheet(item)}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.topicName}>{item.name}</Text>
-                {isCheckedIn && item.lastPracticedAt ? (
-                  <Text style={styles.topicMeta}>
-                    Last: {new Date(item.lastPracticedAt).toLocaleDateString()}
-                  </Text>
-                ) : (
-                  <Text style={[styles.topicMeta, styles.topicMetaUnchecked]}>
-                    Not checked in
-                  </Text>
-                )}
+        ) : (
+          <ScrollView contentContainerStyle={styles.topicListContent}>
+
+            {/* ── Summary tile ── */}
+            <View style={styles.subjectSummaryRow}>
+              <View style={styles.subjectSummaryCard}>
+                <Text style={styles.subjectSummaryVal}>
+                  {checkedIn}
+                  <Text style={styles.subjectSummaryValSub}>/{total}</Text>
+                </Text>
+                <Text style={styles.subjectSummaryLabel}>Checked in</Text>
+                <View style={styles.progressTrack}>
+                  <View
+                    style={[
+                      styles.progressFill,
+                      { width: total > 0 ? `${(checkedIn / total) * 100}%` : '0%' },
+                    ]}
+                  />
+                </View>
               </View>
-              <TopicBars confidence={item.confidence ?? 0} />
-              {isCheckedIn ? (
-                <View style={[styles.confPill, { backgroundColor: CONF_BG[ci] }]}>
-                  <Text style={[styles.confPillText, { color: CONF_TEXT[ci] }]}>
-                    {`${item.confidence}/5`}
-                  </Text>
+              <View style={styles.subjectSummaryCard}>
+                <Text style={styles.subjectSummaryVal}>{total - checkedIn}</Text>
+                <Text style={styles.subjectSummaryLabel}>Remaining</Text>
+              </View>
+            </View>
+
+            {/* ── Topic groups ── */}
+            {groupedTopics.map(({ domain, topics }) => {
+              const isCollapsed   = collapsedDomains.has(domain);
+              const groupChecked  = topics.filter((t) => (t.confidence ?? 0) > 0).length;
+
+              return (
+                <View key={domain} style={styles.domainSection}>
+                  {showDomainHeaders && (
+                    <Pressable style={styles.domainHeader} onPress={() => toggleDomain(domain)}>
+                      <Text style={styles.domainTitle}>{domain}</Text>
+                      <Text style={styles.domainMeta}>{groupChecked}/{topics.length}</Text>
+                      <Text style={styles.domainChevron}>{isCollapsed ? '›' : '⌄'}</Text>
+                    </Pressable>
+                  )}
+
+                  {!isCollapsed && (
+                    <View style={styles.domainCard}>
+                      {topics.map((item, idx) => {
+                        const isCheckedIn = (item.confidence ?? 0) > 0;
+                        const ci         = isCheckedIn ? (item.confidence as number) - 1 : 0;
+                        const colonIdx   = item.name.indexOf(': ');
+                        const shortName  = colonIdx === -1 || domain === 'General'
+                          ? item.name
+                          : item.name.slice(colonIdx + 2);
+                        const isLast     = idx === topics.length - 1;
+
+                        return (
+                          <Pressable
+                            key={item.id}
+                            style={[styles.topicRow, isLast && styles.topicRowLast]}
+                            onPress={() => openSheet(item)}
+                          >
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.topicName}>{shortName}</Text>
+                              {isCheckedIn && item.lastPracticedAt ? (
+                                <Text style={styles.topicMeta}>
+                                  Last: {new Date(item.lastPracticedAt).toLocaleDateString()}
+                                </Text>
+                              ) : (
+                                <Text style={[styles.topicMeta, styles.topicMetaUnchecked]}>
+                                  Not checked in
+                                </Text>
+                              )}
+                            </View>
+                            <TopicBars confidence={item.confidence ?? 0} />
+                            {isCheckedIn ? (
+                              <View style={[styles.confPill, { backgroundColor: CONF_BG[ci] }]}>
+                                <Text style={[styles.confPillText, { color: CONF_TEXT[ci] }]}>
+                                  {item.confidence}/5
+                                </Text>
+                              </View>
+                            ) : (
+                              <View style={[styles.confPill, styles.confPillUnchecked]}>
+                                <Text style={styles.confPillTextUnchecked}>–</Text>
+                              </View>
+                            )}
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  )}
                 </View>
-              ) : (
-                <View style={[styles.confPill, styles.confPillUnchecked]}>
-                  <Text style={styles.confPillTextUnchecked}>–</Text>
-                </View>
-              )}
-            </Pressable>
-          );
-        }}
-      />
-    </View>
-  );
+              );
+            })}
+          </ScrollView>
+        )}
+      </View>
+    );
+  };
 
   // ── Render: bottom sheet ──────────────────────────────────────────────────────
   const renderSheet = () => (
@@ -460,15 +538,36 @@ const styles = StyleSheet.create({
   },
 
   topicListContent: { paddingHorizontal: 16, paddingBottom: 28 },
-  topicRow: {
-    backgroundColor: '#FFFFFF',
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    gap: 10,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#EBEBEB',
+
+  // Subject summary tile
+  subjectSummaryRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  subjectSummaryCard: { flex: 1, backgroundColor: '#FFF', borderRadius: 14, padding: 10 },
+  subjectSummaryVal: { fontSize: 20, fontWeight: '600', color: '#1C1C1E' },
+  subjectSummaryValSub: { fontSize: 13, fontWeight: '400', color: '#AAA' },
+  subjectSummaryLabel: { fontSize: 11, color: '#888', marginTop: 1 },
+  progressTrack: { height: 3, backgroundColor: '#F0F0F0', borderRadius: 2, marginTop: 6, overflow: 'hidden' },
+  progressFill: { height: '100%', backgroundColor: '#1D9E75', borderRadius: 2 },
+
+  // Domain groups
+  domainSection: { marginBottom: 8 },
+  domainHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 4, paddingVertical: 6,
   },
+  domainTitle: {
+    flex: 1, fontSize: 11, fontWeight: '700',
+    textTransform: 'uppercase', letterSpacing: 0.6, color: '#888',
+  },
+  domainMeta: { fontSize: 11, color: '#AAA' },
+  domainChevron: { fontSize: 16, color: '#AAA', width: 14, textAlign: 'center' },
+  domainCard: { backgroundColor: '#FFF', borderRadius: 14, overflow: 'hidden' },
+
+  topicRow: {
+    flexDirection: 'row', alignItems: 'center',
+    padding: 12, gap: 10,
+    borderBottomWidth: 0.5, borderBottomColor: '#EBEBEB',
+  },
+  topicRowLast: { borderBottomWidth: 0 },
   topicName: { fontSize: 13, fontWeight: '500', color: '#1C1C1E' },
   topicMeta: { fontSize: 11, color: '#AAA', marginTop: 2 },
   topicMetaUnchecked: { color: '#C0C0C0', fontStyle: 'italic' },

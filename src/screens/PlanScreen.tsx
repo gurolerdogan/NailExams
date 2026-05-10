@@ -13,12 +13,16 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 
 import { useAuth } from '../context/AuthContext';
+import type { Topic } from '../types/models';
 import type { WeeklyPlan } from '../types/plan';
 import { loadPlan, savePlan, clearPlan } from '../services/storage/planStorage';
+import { loadTopics } from '../services/storage/nailexamsStorage';
 import { now } from '../utils/time';
 import { logEvent } from '../services/logging/logEvent';
 import type { AppTabParamList } from '../navigation/TabNavigator';
 import EmptyState from '../components/EmptyState';
+
+const CONF_COLORS = ['#E24B4A', '#EF9F27', '#FAC775', '#97C459', '#1D9E75'];
 
 // ─── Subject colour palette (must stay in sync with Home + Practice) ──────────
 const TILE_PALETTE = [
@@ -97,8 +101,9 @@ export default function PlanScreen() {
   const { subjects } = useAuth();
   const tabNav = useNavigation<BottomTabNavigationProp<AppTabParamList>>();
 
-  const [plan, setPlan] = useState<WeeklyPlan | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [plan, setPlan]       = useState<WeeklyPlan | null>(null);
+  const [topics, setTopics]   = useState<Topic[]>([]);
+  const [busy, setBusy]       = useState(false);
 
   // Calendar state
   const today = useMemo(() => new Date(), []);
@@ -110,8 +115,9 @@ export default function PlanScreen() {
 
   // ── Load ─────────────────────────────────────────────────────────────────────
   const load = useCallback(async () => {
-    const p = await loadPlan();
+    const [p, t] = await Promise.all([loadPlan(), loadTopics()]);
     setPlan(p);
+    setTopics(t);
   }, []);
 
   useEffect(() => { void load(); }, [load]);
@@ -120,8 +126,19 @@ export default function PlanScreen() {
   // ── Derived ──────────────────────────────────────────────────────────────────
   const streak = useMemo(() => plan ? computeStreak(plan.sessions) : 0, [plan]);
 
-  const doneCount  = useMemo(() => plan?.sessions.filter((s) => s.status === 'DONE').length ?? 0, [plan]);
   const totalCount = plan?.sessions.length ?? 0;
+
+  // topicId → confidence (0 = not checked in)
+  const topicConfidence = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of topics) map.set(t.id, t.confidence ?? 0);
+    return map;
+  }, [topics]);
+
+  const checkedInCount = useMemo(
+    () => plan?.sessions.filter((s) => (topicConfidence.get(s.topicId) ?? 0) > 0).length ?? 0,
+    [plan, topicConfidence],
+  );
 
   // Sessions for the selected week (Mon–Sun)
   const weekSessions = useMemo(() => {
@@ -257,20 +274,20 @@ export default function PlanScreen() {
     <View style={styles.summaryRow}>
       <View style={styles.summaryCard}>
         <Text style={styles.summaryVal}>
-          {doneCount}<Text style={styles.summaryValSub}>/{totalCount}</Text>
+          {checkedInCount}<Text style={styles.summaryValSub}>/{totalCount}</Text>
         </Text>
-        <Text style={styles.summaryLabel}>Done this week</Text>
+        <Text style={styles.summaryLabel}>Checked in</Text>
         <View style={styles.progressTrack}>
           <View
             style={[
               styles.progressFill,
-              { width: totalCount > 0 ? `${(doneCount / totalCount) * 100}%` : '0%' },
+              { width: totalCount > 0 ? `${(checkedInCount / totalCount) * 100}%` : '0%' },
             ]}
           />
         </View>
       </View>
       <View style={styles.summaryCard}>
-        <Text style={styles.summaryVal}>{totalCount - doneCount}</Text>
+        <Text style={styles.summaryVal}>{totalCount - checkedInCount}</Text>
         <Text style={styles.summaryLabel}>Remaining</Text>
       </View>
       <View style={styles.summaryCard}>
@@ -379,6 +396,8 @@ export default function PlanScreen() {
             const palette = TILE_PALETTE[paletteIdx];
             const sessionDate = isoToDate(session.date);
             const dayLabel = sessionDate.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+            const conf = topicConfidence.get(session.topicId) ?? 0;
+            const checkedIn = conf > 0;
 
             return (
               <Pressable
@@ -393,7 +412,17 @@ export default function PlanScreen() {
 
                 <View style={{ flex: 1 }}>
                   <Text style={styles.sessionTitle} numberOfLines={2}>{session.title}</Text>
-                  <Text style={styles.sessionMeta}>{dayLabel}</Text>
+                  <View style={styles.sessionMetaRow}>
+                    <Text style={styles.sessionMeta}>{dayLabel}</Text>
+                    {checkedIn && (
+                      <>
+                        <View style={[styles.confDot, { backgroundColor: CONF_COLORS[conf - 1] }]} />
+                        <Text style={[styles.confLabel, { color: CONF_COLORS[conf - 1] }]}>
+                          {conf}/5
+                        </Text>
+                      </>
+                    )}
+                  </View>
                 </View>
 
                 {done ? (
@@ -405,7 +434,7 @@ export default function PlanScreen() {
                     style={styles.startBtn}
                     onPress={() => openPractice(session)}
                   >
-                    <Text style={styles.startBtnText}>Start →</Text>
+                    <Text style={styles.startBtnText}>{checkedIn ? 'Mark again' : 'Start →'}</Text>
                   </Pressable>
                 )}
               </Pressable>
@@ -422,7 +451,7 @@ export default function PlanScreen() {
       <Text style={styles.screenTitle}>Study Plan</Text>
       <Text style={styles.screenSub}>
         {MONTH_NAMES[calMonth]} {calYear}
-        {plan ? ` · ${doneCount} of ${totalCount} done` : ''}
+        {plan ? ` · ${checkedInCount} of ${totalCount} checked in` : ''}
       </Text>
 
       {!plan ? (
@@ -562,7 +591,10 @@ const styles = StyleSheet.create({
   },
   sessionIconDot: { width: 10, height: 10, borderRadius: 5 },
   sessionTitle: { fontSize: 13, fontWeight: '500', color: '#1C1C1E' },
-  sessionMeta: { fontSize: 11, color: '#AAA', marginTop: 2 },
+  sessionMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
+  sessionMeta: { fontSize: 11, color: '#AAA' },
+  confDot: { width: 6, height: 6, borderRadius: 3 },
+  confLabel: { fontSize: 11, fontWeight: '600' },
 
   badgeDone: {
     backgroundColor: '#DCFCE7',

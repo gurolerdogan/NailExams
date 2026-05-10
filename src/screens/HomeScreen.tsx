@@ -10,9 +10,11 @@ import {
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 
+import { getAuth } from 'firebase/auth';
 import { useAuth } from '../context/AuthContext';
 import { loadPlan } from '../services/storage/planStorage';
 import { loadTopics } from '../services/storage/nailexamsStorage';
+import { loadAttempts } from '../services/storage/practiceStorage';
 import type { WeeklyPlan } from '../types/plan';
 import type { Topic } from '../types/models';
 import type { AppTabParamList } from '../navigation/TabNavigator';
@@ -99,13 +101,15 @@ export default function HomeScreen() {
   const [mode, setMode] = useState<HomeMode>('subjects');
   const [plan, setPlan] = useState<WeeklyPlan | null>(null);
   const [allTopics, setAllTopics] = useState<Topic[]>([]);
+  const [checkinCount, setCheckinCount] = useState(0);
   const [selectedDate, setSelectedDate] = useState<string>(toISODate(new Date()));
 
   const load = useCallback(async () => {
     await refreshUserData();
-    const [p, t] = await Promise.all([loadPlan(), loadTopics()]);
+    const [p, t, attempts] = await Promise.all([loadPlan(), loadTopics(), loadAttempts()]);
     setPlan(p);
     setAllTopics(t);
+    setCheckinCount(attempts.length);
     if (p) {
       const days = weekDates(p.weekStart);
       if (!days.includes(selectedDate)) setSelectedDate(days[0]);
@@ -115,7 +119,9 @@ export default function HomeScreen() {
   useEffect(() => { void load(); }, [load]);
   useFocusEffect(useCallback(() => { void load(); }, [load]));
 
-  const level = profile?.examLevel ?? '—';
+  const email       = getAuth().currentUser?.email ?? '—';
+  const avatarLetter = email !== '—' ? email[0].toUpperCase() : '?';
+  const level       = profile?.examLevel ?? '—';
 
   const subjectStats = useMemo(() => {
     const map = new Map<string, { bars: number[]; checkedIn: number; total: number }>();
@@ -149,7 +155,38 @@ export default function HomeScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.appTitle}>NailExams</Text>
-      <Text style={styles.subTitle}>{level} · {subjects.length} subjects</Text>
+
+      {/* ── Profile card ── */}
+      <View style={styles.profileCard}>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{avatarLetter}</Text>
+        </View>
+        <View style={styles.profileInfo}>
+          <Text style={styles.profileEmail} numberOfLines={1}>{email}</Text>
+          <Text style={styles.profileMeta}>
+            {subjects.length} subject{subjects.length !== 1 ? 's' : ''} · {level}
+          </Text>
+        </View>
+        <View style={styles.levelBadge}>
+          <Text style={styles.levelBadgeText}>{level}</Text>
+        </View>
+      </View>
+
+      {/* ── Stats row ── */}
+      <View style={styles.statsRow}>
+        <View style={styles.statCard}>
+          <Text style={styles.statVal}>{subjects.length}</Text>
+          <Text style={styles.statLabel}>Subjects</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statVal}>{allTopics.length}</Text>
+          <Text style={styles.statLabel}>Topics</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={[styles.statVal, { color: '#1D9E75' }]}>{checkinCount}</Text>
+          <Text style={styles.statLabel}>Check-ins</Text>
+        </View>
+      </View>
 
       <View style={styles.pillSwitcher}>
         <Pressable
@@ -292,8 +329,32 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F2F2F7' },
   content: { padding: 16, paddingBottom: 28 },
 
-  appTitle: { fontSize: 32, fontWeight: '700', color: '#1C1C1E' },
-  subTitle: { marginTop: 2, fontSize: 13, color: '#888', marginBottom: 16 },
+  appTitle: { fontSize: 32, fontWeight: '700', color: '#1C1C1E', marginBottom: 12 },
+
+  // Profile card
+  profileCard: {
+    backgroundColor: '#1C1C1E', borderRadius: 18, padding: 16,
+    flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 10,
+  },
+  avatar: {
+    width: 46, height: 46, borderRadius: 23, backgroundColor: '#333',
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  avatarText: { fontSize: 18, fontWeight: '600', color: '#FFF' },
+  profileInfo: { flex: 1, minWidth: 0 },
+  profileEmail: { fontSize: 13, fontWeight: '500', color: '#FFF' },
+  profileMeta: { fontSize: 11, color: '#AAA', marginTop: 3 },
+  levelBadge: {
+    backgroundColor: '#2C2C2E', borderRadius: 8,
+    paddingHorizontal: 10, paddingVertical: 4, flexShrink: 0,
+  },
+  levelBadgeText: { fontSize: 11, fontWeight: '500', color: '#98D7C2' },
+
+  // Stats row
+  statsRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  statCard: { flex: 1, backgroundColor: '#FFF', borderRadius: 14, padding: 10 },
+  statVal: { fontSize: 20, fontWeight: '600', color: '#1C1C1E' },
+  statLabel: { fontSize: 11, color: '#888', marginTop: 1 },
 
   pillSwitcher: {
     flexDirection: 'row',
