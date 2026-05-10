@@ -9,15 +9,12 @@
     "newArchEnabled": true,
     "scheme": "nailexams",
     "primaryColor": "#1C1C1E",
-
     "icon": "./assets/icon.png",
-
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "cover",
       "backgroundColor": "#1C1C1E"
     },
-
     "ios": {
       "bundleIdentifier": "com.gurolerdogan.nailexams",
       "buildNumber": "1",
@@ -27,7 +24,6 @@
         "CFBundleDisplayName": "NailExams"
       }
     },
-
     "android": {
       "package": "com.gurolerdogan.nailexams",
       "versionCode": 1,
@@ -38,15 +34,15 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
-
     "web": {
       "favicon": "./assets/favicon.png"
     },
-
     "extra": {
       "eas": {
-        "projectId": ""
-      }
+        "projectId": "fba1e4ba-2205-48fe-8740-18afb390b1c3"
+      },
+      "appEnv": "development",
+      "firebase": {}
     }
   }
 }
