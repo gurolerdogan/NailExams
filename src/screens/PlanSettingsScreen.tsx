@@ -25,23 +25,9 @@ import { now } from '../utils/time';
 import type { PlanConfig, PlanSession, TopicOrder, WeeklyPlan } from '../types/plan';
 import type { Topic } from '../types/models';
 import type { AppTabParamList } from '../navigation/TabNavigator';
+import { TILE_PALETTE } from '../constants/palette';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const TILE_PALETTE = [
-  { bg: '#FAEEDA', dot: '#633806' },
-  { bg: '#FBEAF0', dot: '#72243E' },
-  { bg: '#E6F1FB', dot: '#0C447C' },
-  { bg: '#EEEDFE', dot: '#3C3489' },
-  { bg: '#EAF3DE', dot: '#27500A' },
-  { bg: '#E1F5EE', dot: '#085041' },
-  { bg: '#FEF9C3', dot: '#854D0E' },
-  { bg: '#F3E8FF', dot: '#5B21B6' },
-  { bg: '#FCEBEB', dot: '#A32D2D' },
-  { bg: '#E0F2FE', dot: '#075985' },
-  { bg: '#F0FDF4', dot: '#166534' },
-  { bg: '#FFF7ED', dot: '#9A3412' },
-];
 
 const DURATION_OPTIONS: Array<30 | 60 | 90> = [30, 60, 90];
 const TOPICS_OPTIONS: Array<1 | 2 | 3 | 4> = [1, 2, 3, 4];
@@ -113,15 +99,23 @@ export default function PlanSettingsScreen() {
   const slideAnim = useRef(new Animated.Value(500)).current;
 
   // ── load ─────────────────────────────────────────────────────────────────────
+  // Keep a ref to subjects so the load function can read the latest value without
+  // being a dependency of it. This prevents the useEffect from re-firing (and
+  // resetting user selections) every time AuthContext emits a new subjects reference.
+  const subjectsRef = useRef(subjects);
+  subjectsRef.current = subjects;
+
   const load = useCallback(async () => {
     const [savedConfig, allTopics] = await Promise.all([loadPlanConfig(), loadTopics()]);
     setTopics(allTopics);
+    const currentSubjects = subjectsRef.current;
     const subjectIds =
       savedConfig.subjectIds.length > 0
-        ? savedConfig.subjectIds.filter((id) => subjects.some((s) => s.id === id))
-        : subjects.map((s) => s.id);
+        ? savedConfig.subjectIds.filter((id) => currentSubjects.some((s) => s.id === id))
+        : currentSubjects.map((s) => s.id);
     setConfig({ ...savedConfig, subjectIds });
-  }, [subjects]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally empty — uses subjectsRef to avoid reset on context re-renders
 
   useEffect(() => { void load(); }, [load]);
 
@@ -191,7 +185,7 @@ export default function PlanSettingsScreen() {
       const dots = map.get(s.date) ?? [];
       if (dots.length < 3) {
         const idx = idxOf.get(s.subjectId) ?? 0;
-        dots.push(TILE_PALETTE[idx % TILE_PALETTE.length].dot);
+        dots.push(TILE_PALETTE[idx % TILE_PALETTE.length].text);
       }
       map.set(s.date, dots);
     }
@@ -258,6 +252,7 @@ export default function PlanSettingsScreen() {
         topicOrder: config.topicOrder,
         sessions: plan.sessions.length,
       });
+      tabNav.goBack();      // pop PlanSettings so Settings tab shows SettingsHome on return
       tabNav.navigate('Plan');
     } catch (e: any) {
       Alert.alert('Failed to generate plan', String(e?.message ?? e));
@@ -293,6 +288,7 @@ export default function PlanSettingsScreen() {
         sessions: manualSessions.length,
         durationDays: manualDuration,
       });
+      tabNav.goBack();      // pop PlanSettings so Settings tab shows SettingsHome on return
       tabNav.navigate('Plan');
     } catch (e: any) {
       Alert.alert('Failed to save plan', String(e?.message ?? e));
@@ -337,7 +333,7 @@ export default function PlanSettingsScreen() {
                 onPress={() => toggleSubject(subject.id)}
               >
                 <View style={[styles.subjectDot, { backgroundColor: palette.bg }]}>
-                  <View style={[styles.subjectDotInner, { backgroundColor: palette.dot }]} />
+                  <View style={[styles.subjectDotInner, { backgroundColor: palette.text }]} />
                 </View>
                 <Text style={styles.subjectName} numberOfLines={1}>{subject.name}</Text>
                 <Text style={styles.subjectCount}>{count} topics</Text>
@@ -571,8 +567,8 @@ export default function PlanSettingsScreen() {
                   return (
                     <View key={subject.id}>
                       <View style={[styles.sheetSubjectHeader, { backgroundColor: palette.bg }]}>
-                        <View style={[styles.sheetSubjectDot, { backgroundColor: palette.dot }]} />
-                        <Text style={[styles.sheetSubjectName, { color: palette.dot }]}>
+                        <View style={[styles.sheetSubjectDot, { backgroundColor: palette.text }]} />
+                        <Text style={[styles.sheetSubjectName, { color: palette.text }]}>
                           {subject.name}
                         </Text>
                       </View>

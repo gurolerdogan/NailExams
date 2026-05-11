@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
   KeyboardAvoidingView,
   Modal,
@@ -18,25 +19,14 @@ import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../context/AuthContext';
 import type { Subject, Topic } from '../types/models';
 import { loadTopics, saveTopics } from '../services/storage/nailexamsStorage';
-import { appendAttempt } from '../services/storage/practiceStorage';
+import { appendAttempt, loadAttempts } from '../services/storage/practiceStorage';
 import type { PracticeAttempt } from '../types/practice';
 import { uuid } from '../utils/id';
 import { now } from '../utils/time';
 import { logEvent } from '../services/logging/logEvent';
 import type { AppTabParamList } from '../navigation/TabNavigator';
 import EmptyState from '../components/EmptyState';
-
-// ─── Shared palette (must stay in sync with HomeScreen) ──────────────────────
-const TILE_PALETTE = [
-  { bg: '#FAEEDA', text: '#633806' },
-  { bg: '#FBEAF0', text: '#72243E' },
-  { bg: '#E6F1FB', text: '#0C447C' },
-  { bg: '#EEEDFE', text: '#3C3489' },
-  { bg: '#EAF3DE', text: '#27500A' },
-  { bg: '#E1F5EE', text: '#085041' },
-  { bg: '#FEF9C3', text: '#854D0E' },
-  { bg: '#F3E8FF', text: '#5B21B6' },
-];
+import { TILE_PALETTE } from '../constants/palette';
 
 const CONF_BAR_COLORS = ['#E24B4A', '#EF9F27', '#FAC775', '#97C459', '#1D9E75'];
 const CONF_BG         = ['#FCEBEB', '#FAEEDA', '#FEF9C3', '#EAF3DE', '#E1F5EE'];
@@ -90,33 +80,38 @@ function TopicBars({ confidence }: { confidence: number }) {
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
 export default function PracticeScreen() {
-  const { subjects, refreshUserData } = useAuth();
+  const { subjects } = useAuth();
   const route = useRoute<PracticeRoute>();
   const tabNav = useNavigation<BottomTabNavigationProp<AppTabParamList>>();
 
   const subjectIdFromNav = route.params?.subjectId;
   const topicIdFromNav   = route.params?.topicId;
 
-  const [allTopics, setAllTopics]             = useState<Topic[]>([]);
-  const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
+  const [allTopics, setAllTopics]               = useState<Topic[]>([]);
+  const [selectedSubject, setSelectedSubject]   = useState<Subject | null>(null);
   const [collapsedDomains, setCollapsedDomains] = useState<Set<string>>(new Set());
-  const [sheetTopic, setSheetTopic]           = useState<Topic | null>(null);
+  const [lastNoteByTopic, setLastNoteByTopic]   = useState<Map<string, string>>(new Map());
+  const [sheetTopic, setSheetTopic]             = useState<Topic | null>(null);
   // null = no button pre-selected; user must pick a confidence level before saving
-  const [confidence, setConfidence]           = useState<1 | 2 | 3 | 4 | 5 | null>(null);
-  const [note, setNote]                       = useState('');
-  const [busy, setBusy]                       = useState(false);
-  const [sheetVisible, setSheetVisible]       = useState(false);
+  const [confidence, setConfidence]             = useState<1 | 2 | 3 | 4 | 5 | null>(null);
+  const [note, setNote]                         = useState('');
+  const [busy, setBusy]                         = useState(false);
+  const [sheetVisible, setSheetVisible]         = useState(false);
 
   const slideAnim = useRef(new Animated.Value(300)).current;
 
+  // Keep a ref so openSheet can read the latest notes without being a dep of the
+  // topicIdFromNav effect — prevents the sheet from re-opening after every save.
+  const lastNoteByTopicRef = useRef(lastNoteByTopic);
+  lastNoteByTopicRef.current = lastNoteByTopic;
+
   const openSheet = useCallback((topic: Topic) => {
     setSheetTopic(topic);
-    // Pre-select existing confidence if topic was previously checked in; otherwise no selection
     const existing = topic.confidence && topic.confidence > 0
       ? (topic.confidence as 1 | 2 | 3 | 4 | 5)
       : null;
     setConfidence(existing);
-    setNote('');
+    setNote(lastNoteByTopicRef.current.get(topic.id) ?? '');
     setSheetVisible(true);
     Animated.spring(slideAnim, {
       toValue: 0,
@@ -124,7 +119,7 @@ export default function PracticeScreen() {
       damping: 20,
       stiffness: 180,
     }).start();
-  }, [slideAnim]);
+  }, [slideAnim]); // stable — no lastNoteByTopic dep
 
   const closeSheet = useCallback(() => {
     Animated.timing(slideAnim, {
@@ -137,10 +132,16 @@ export default function PracticeScreen() {
     });
   }, [slideAnim]);
 
-  // ── Load topics ───────────────────────────────────────────────────────────────
+  // ── Load topics + attempts ────────────────────────────────────────────────────
   const refreshTopics = useCallback(async () => {
-    const data = await loadTopics();
+    const [data, attempts] = await Promise.all([loadTopics(), loadAttempts()]);
     setAllTopics(data);
+    // Build a map of topicId → most recent note (attempts are stored oldest→newest)
+    const noteMap = new Map<string, string>();
+    for (const a of attempts) {
+      if (a.note) noteMap.set(a.topicId, a.note);
+    }
+    setLastNoteByTopic(noteMap);
   }, []);
 
   useEffect(() => { void refreshTopics(); }, [refreshTopics]);
@@ -186,17 +187,28 @@ export default function PracticeScreen() {
     return allTopics.filter((t) => t.subjectId === selectedSubject.id);
   }, [allTopics, selectedSubject]);
 
-  // Group topics by domain prefix ("Domain: topic name" → domain = "Domain")
+  // Group topics by domain prefix ("Domain: topic name" → domain = "Domain").
+  // Guard: if the prefix before ': ' is > 25 chars it's likely a user-written topic
+  // title, not a catalog domain label — treat it as General to avoid bad grouping.
   const groupedTopics = useMemo(() => {
     const groups = new Map<string, Topic[]>();
     for (const topic of subjectTopics) {
       const colonIdx = topic.name.indexOf(': ');
-      const domain = colonIdx === -1 ? 'General' : topic.name.slice(0, colonIdx);
-      const list = groups.get(domain) ?? [];
+      const prefix   = colonIdx === -1 ? '' : topic.name.slice(0, colonIdx);
+      const domain   = prefix.length > 0 && prefix.length <= 25 ? prefix : 'General';
+      const list     = groups.get(domain) ?? [];
       list.push(topic);
       groups.set(domain, list);
     }
-    return Array.from(groups.entries()).map(([domain, topics]) => ({ domain, topics }));
+    return Array.from(groups.entries()).map(([domain, topics]) => ({
+      domain,
+      // Sort alphabetically by the short name (after the domain prefix)
+      topics: [...topics].sort((a, b) => {
+        const aShort = a.name.includes(': ') ? a.name.split(': ').slice(1).join(': ') : a.name;
+        const bShort = b.name.includes(': ') ? b.name.split(': ').slice(1).join(': ') : b.name;
+        return aShort.localeCompare(bShort);
+      }),
+    }));
   }, [subjectTopics]);
 
   const toggleDomain = (domain: string) =>
@@ -239,6 +251,11 @@ export default function PracticeScreen() {
         await saveTopics(nextAll);
       }
 
+      // Keep lastNoteByTopic in sync so the note is shown immediately on reopen
+      if (note.trim()) {
+        setLastNoteByTopic((prev) => new Map(prev).set(sheetTopic.id, note.trim()));
+      }
+
       await logEvent('practice_checkin_saved', {
         subjectId: selectedSubject.id,
         topicId: sheetTopic.id,
@@ -246,10 +263,9 @@ export default function PracticeScreen() {
         noteLen: note.trim().length,
       });
 
-      await refreshUserData();
       closeSheet();
     } catch (e: any) {
-      console.error('Check-in save failed', e);
+      Alert.alert('Save failed', 'Your check-in could not be saved. Please try again.');
     } finally {
       setBusy(false);
     }
@@ -388,6 +404,11 @@ export default function PracticeScreen() {
                                   Not checked in
                                 </Text>
                               )}
+                              {lastNoteByTopic.get(item.id) ? (
+                                <Text style={styles.topicNote} numberOfLines={1}>
+                                  "{lastNoteByTopic.get(item.id)}"
+                                </Text>
+                              ) : null}
                             </View>
                             <TopicBars confidence={item.confidence ?? 0} />
                             {isCheckedIn ? (
@@ -571,6 +592,7 @@ const styles = StyleSheet.create({
   topicName: { fontSize: 13, fontWeight: '500', color: '#1C1C1E' },
   topicMeta: { fontSize: 11, color: '#AAA', marginTop: 2 },
   topicMetaUnchecked: { color: '#C0C0C0', fontStyle: 'italic' },
+  topicNote: { fontSize: 11, color: '#AAA', fontStyle: 'italic', marginTop: 1 },
   topicBarsRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 2, width: 40 },
   topicBar: { width: 6, borderRadius: 1 },
 

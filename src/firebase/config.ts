@@ -1,6 +1,15 @@
 import Constants from 'expo-constants';
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { initializeAuth, getAuth } from 'firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// getReactNativePersistence lives in the React Native build of firebase/auth
+// (resolved by Metro at runtime) but is absent from the web TypeScript types.
+import type { Persistence } from 'firebase/auth';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { getReactNativePersistence } = require('firebase/auth') as {
+  getReactNativePersistence: (storage: typeof AsyncStorage) => Persistence;
+};
 
 type FirebaseExtra = {
   appEnv?: string;
@@ -15,7 +24,6 @@ type FirebaseExtra = {
 };
 
 function getExtra(): FirebaseExtra {
-  // Expo SDK sometimes exposes config via different paths depending on runtime/build.
   const expoConfig = Constants.expoConfig ?? Constants.manifest2?.extra?.expoClient ?? Constants.manifest;
   return (expoConfig?.extra ?? {}) as FirebaseExtra;
 }
@@ -24,15 +32,13 @@ function assertFirebaseConfig(cfg: Required<NonNullable<FirebaseExtra['firebase'
   const missing = Object.entries(cfg)
     .filter(([, v]) => !v)
     .map(([k]) => k);
-
   if (missing.length) {
     throw new Error(`Missing Firebase config values: ${missing.join(', ')}`);
   }
 }
 
 export function getAppEnv(): string {
-  const extra = getExtra();
-  return extra.appEnv ?? 'development';
+  return getExtra().appEnv ?? 'development';
 }
 
 export function getFirebaseApp(): FirebaseApp {
@@ -40,31 +46,32 @@ export function getFirebaseApp(): FirebaseApp {
   const firebase = extra.firebase ?? {};
 
   const cfg = {
-    apiKey: firebase.apiKey ?? '',
-    authDomain: firebase.authDomain ?? '',
-    projectId: firebase.projectId ?? '',
-    storageBucket: firebase.storageBucket ?? '',
+    apiKey:            firebase.apiKey            ?? '',
+    authDomain:        firebase.authDomain        ?? '',
+    projectId:         firebase.projectId         ?? '',
+    storageBucket:     firebase.storageBucket     ?? '',
     messagingSenderId: firebase.messagingSenderId ?? '',
-    appId: firebase.appId ?? '',
+    appId:             firebase.appId             ?? '',
   };
 
   assertFirebaseConfig(cfg);
 
   if (getApps().length === 0) {
-    // Initialize once
     const app = initializeApp(cfg);
-    // Minimal boot log (SafeCube-style discipline)
-    // eslint-disable-next-line no-console
-    console.log(`[NailExams] ENV=${getAppEnv()} Firebase initialized`);
+    // Initialise auth with AsyncStorage persistence so sessions survive app restarts
+    initializeAuth(app, {
+      persistence: getReactNativePersistence(AsyncStorage),
+    });
+    if (__DEV__) console.log(`[NailExams] ENV=${getAppEnv()} Firebase initialized`); // eslint-disable-line no-console
     return app;
   }
 
-  // eslint-disable-next-line no-console
-  console.log(`[NailExams] ENV=${getAppEnv()} Firebase already initialized`);
+  if (__DEV__) console.log(`[NailExams] ENV=${getAppEnv()} Firebase already initialized`); // eslint-disable-line no-console
   return getApps()[0]!;
 }
 
 export function getFirebaseAuth() {
   const app = getFirebaseApp();
+  // getAuth() returns the already-initialised auth instance (with persistence)
   return getAuth(app);
 }

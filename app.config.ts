@@ -11,15 +11,39 @@ export default (): ExpoConfig => {
     version: '1.0.0',
     orientation: 'portrait',
     icon: './assets/icon.png',
+    userInterfaceStyle: 'light',
+    newArchEnabled: true,
     splash: {
       image: './assets/splash.png',
-      resizeMode: 'contain',
-      backgroundColor: '#ffffff',
+      resizeMode: 'cover',
+      backgroundColor: '#1C1C1E',
     },
-    ios: { supportsTablet: true },
-    android: {},
+    ios: {
+      bundleIdentifier: 'com.gurolerdogan.nailexams',
+      buildNumber: '1',
+      supportsTablet: false,
+      infoPlist: {
+        NSCameraUsageDescription: 'NailExams does not use the camera.',
+        CFBundleDisplayName: 'NailExams',
+      },
+    },
+    android: {
+      package: 'com.gurolerdogan.nailexams',
+      versionCode: 1,
+      adaptiveIcon: {
+        foregroundImage: './assets/adaptive-icon.png',
+        backgroundColor: '#1C1C1E',
+      },
+      edgeToEdgeEnabled: true,
+    },
+    web: {
+      favicon: './assets/favicon.png',
+    },
     extra: {
       appEnv,
+      eas: {
+        projectId: 'fba1e4ba-2205-48fe-8740-18afb390b1c3', // ← paste your ID from expo.dev
+      },
       firebase: {
         apiKey: process.env.FIREBASE_API_KEY,
         authDomain: process.env.FIREBASE_AUTH_DOMAIN,
@@ -31,4 +55,3 @@ export default (): ExpoConfig => {
     },
   };
 };
-

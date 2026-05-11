@@ -9,24 +9,10 @@ import type { Subject, UserProfile } from '../../types/models';
 import { now } from '../../utils/time';
 import { uuid } from '../../utils/id';
 import { logEvent } from '../../services/logging/logEvent';
-import { preloadGcseTopicsForSubjects } from '../../services/seed/preloadGcseTopics';
+import { preloadTopicsForSubjects } from '../../services/seed/preloadGcseTopics';
+import { TILE_PALETTE } from '../../constants/palette';
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, 'OnboardingConfirm'>;
-
-const TILE_PALETTE = [
-  { bg: '#FAEEDA', text: '#633806' },
-  { bg: '#FBEAF0', text: '#72243E' },
-  { bg: '#E6F1FB', text: '#0C447C' },
-  { bg: '#EEEDFE', text: '#3C3489' },
-  { bg: '#EAF3DE', text: '#27500A' },
-  { bg: '#E1F5EE', text: '#085041' },
-  { bg: '#FEF9C3', text: '#854D0E' },
-  { bg: '#F3E8FF', text: '#5B21B6' },
-  { bg: '#FCEBEB', text: '#A32D2D' },
-  { bg: '#E0F2FE', text: '#075985' },
-  { bg: '#F0FDF4', text: '#166534' },
-  { bg: '#FFF7ED', text: '#9A3412' },
-];
 
 export default function OnboardingConfirmScreen({ route, navigation }: Props) {
   const { examLevel, subjectNames } = route.params;
@@ -46,7 +32,7 @@ export default function OnboardingConfirmScreen({ route, navigation }: Props) {
       }));
       await saveProfile(profile);
       await saveSubjects(subjects);
-      await preloadGcseTopicsForSubjects({ examLevel: profile.examLevel, subjects });
+      await preloadTopicsForSubjects({ examLevel: profile.examLevel, subjects });
       await setOnboardingDone(true);
       await refreshUserData();
       await refreshOnboarding();

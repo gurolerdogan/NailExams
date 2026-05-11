@@ -14,9 +14,7 @@ export async function logEvent(name: string, payload?: Record<string, any>): Pro
     payload,
   };
 
-  // Always console log (dev visibility)
-  // eslint-disable-next-line no-console
-  console.log(`[NailExams] ${name}`, payload ?? {});
+  if (__DEV__) console.log(`[NailExams] ${name}`, payload ?? {}); // eslint-disable-line no-console
 
   // Best-effort persistence (never block UX)
   try {
