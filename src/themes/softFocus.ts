@@ -6,6 +6,9 @@ export const softFocusTheme: Theme = {
   description: 'Warm terracotta · cozy',
   dark: false,
   previewSwatches: ['#FDF8F4', '#FFFFFF', '#D96B3F', '#7B9E6E'],
+  subjectPanel: 'tile'  as const,
+  progressChart: 'barchart' as const,
+  checkedIn: 'CtoT' as const,
   colors: {
     screenBg: '#FDF8F4',
     cardBg: '#FFFFFF',

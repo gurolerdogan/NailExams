@@ -18,6 +18,11 @@ export default (): ExpoConfig => {
       ['@react-native-google-signin/google-signin', {
         iosUrlScheme: 'com.googleusercontent.apps.948483076530-npmq65i0lqnk6cah7trig8aainjgknmt',
       }],
+      ['expo-notifications', {
+        icon: './assets/icon.png',
+        color: '#0A0A0C',
+        defaultChannel: 'default',
+      }],
     ],
     splash: {
       image: './assets/splash.png',

@@ -19,7 +19,7 @@ import type { Topic } from '../types/models';
 import type { AppTabParamList } from '../navigation/TabNavigator';
 import EmptyState from '../components/EmptyState';
 import { TILE_PALETTE } from '../constants/palette';
-import type { Theme } from '../themes';
+import type { Theme, ProgressChartType, CheckedInType } from '../themes';
 
 const CONF_BAR_COLORS = ['#E24B4A', '#EF9F27', '#FAC775', '#97C459', '#1D9E75'];
 
@@ -40,32 +40,68 @@ function dayNum(iso: string) {
   return String(Number(iso.slice(-2)));
 }
 
-function ConfidenceBars({ bars }: { bars: number[] }) {
-  const max = Math.max(...bars, 1);
-  return (
-    <View style={staticStyles.barsRow}>
-      {bars.map((count, i) => (
-        <View
-          key={i}
-          style={[
-            staticStyles.bar,
-            {
+// ─── Progress chart variants ──────────────────────────────────────────────────
+
+function ProgressChart({ type, bars, checkedIn, total, accentColor, trackColor }: {
+  type: ProgressChartType;
+  bars: number[];
+  checkedIn: number;
+  total: number;
+  accentColor: string;
+  trackColor: string;
+}) {
+  if (type === 'barchart') {
+    const max = Math.max(...bars, 1);
+    return (
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 24, flex: 1 }}>
+        {bars.map((count, i) => (
+          <View
+            key={i}
+            style={{
+              flex: 1, borderRadius: 2,
               height: Math.max(4, Math.round((Math.max(0.15, count / max)) * 20)),
               backgroundColor: CONF_BAR_COLORS[i],
               opacity: count === 0 ? 0.2 : 1,
-            },
-          ]}
+            }}
+          />
+        ))}
+      </View>
+    );
+  }
+
+  if (type === 'progressline') {
+    const pct = total > 0 ? (checkedIn / total) * 100 : 0;
+    return (
+      <View style={{ height: 5, backgroundColor: trackColor, borderRadius: 3, flex: 1, overflow: 'hidden' }}>
+        <View style={{ height: '100%', width: `${pct}%`, backgroundColor: accentColor, borderRadius: 3 }} />
+      </View>
+    );
+  }
+
+  // colordots — 5 rectangular cells, opacity reflects density at each confidence level
+  const max = Math.max(...bars, 1);
+  return (
+    <View style={{ flexDirection: 'row', gap: 3, flex: 1 }}>
+      {bars.map((count, i) => (
+        <View
+          key={i}
+          style={{
+            flex: 1, height: 10, borderRadius: 3,
+            backgroundColor: CONF_BAR_COLORS[i],
+            opacity: count === 0 ? 0.12 : 0.25 + (count / max) * 0.75,
+          }}
         />
       ))}
     </View>
   );
 }
 
-// Static styles that don't depend on theme (geometry-only)
-const staticStyles = StyleSheet.create({
-  barsRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 24, flex: 1 },
-  bar: { flex: 1, borderRadius: 2 },
-});
+function checkedInDisplay(checkedIn: number, total: number, type: CheckedInType): string {
+  if (total === 0) return '—';
+  return type === 'Percent'
+    ? `${Math.round((checkedIn / total) * 100)}%`
+    : `${checkedIn}/${total}`;
+}
 
 function createStyles(theme: Theme) {
   return StyleSheet.create({
@@ -125,11 +161,49 @@ function createStyles(theme: Theme) {
       lineHeight: 17,
     },
 
+    // Tile layout
     subjectGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-    subjectTile: { width: '47.5%', borderRadius: 16, padding: 12, paddingBottom: 10 },
+    subjectTile: { width: '47.5%', borderRadius: theme.radii.tile, padding: 12, paddingBottom: 10 },
     tileName: { fontSize: 13, fontWeight: theme.fonts.bodyWeight, marginBottom: 8, lineHeight: 18, fontFamily: theme.fonts.body },
     tileFooter: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
     tileProgress: { fontSize: 11, fontWeight: '600', opacity: 0.6, paddingBottom: 2 },
+
+    // List layout
+    subjectList: {
+      backgroundColor: theme.colors.cardBg,
+      borderRadius: theme.radii.card,
+      overflow: 'hidden',
+    },
+    subjectListRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      gap: 12,
+      borderBottomWidth: 0.5,
+      borderBottomColor: theme.colors.divider,
+    },
+    subjectListRowLast: { borderBottomWidth: 0 },
+    subjectListDot: {
+      width: 30, height: 30, borderRadius: 9,
+      alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    },
+    subjectListName: {
+      fontSize: 14, fontWeight: theme.fonts.bodyWeight,
+      color: theme.colors.textPrimary, fontFamily: theme.fonts.body,
+      marginBottom: 5,
+    },
+    subjectListBadge: {
+      paddingHorizontal: 10, paddingVertical: 4,
+      borderRadius: theme.radii.pill,
+      backgroundColor: theme.dark ? theme.colors.cardBorder : theme.colors.screenBg,
+      flexShrink: 0,
+    },
+    subjectListBadgeText: {
+      fontSize: 12, fontWeight: '700',
+      color: theme.colors.accent,
+      fontFamily: theme.fonts.body,
+    },
 
     weekStrip: { flexDirection: 'row', gap: 5, marginBottom: 12 },
     dayPill: {
@@ -344,7 +418,8 @@ export default function HomeScreen() {
               cta="Edit subjects"
               onCta={() => tabNav.navigate('Settings', { screen: 'EditSubjects' })}
             />
-          ) : (
+          ) : theme.subjectPanel === 'tile' ? (
+            /* ── TILE layout ── */
             <View style={styles.subjectGrid}>
               {subjects.map((s, idx) => {
                 const palette = TILE_PALETTE[idx % TILE_PALETTE.length];
@@ -353,15 +428,63 @@ export default function HomeScreen() {
                   <Pressable
                     key={s.id}
                     style={[styles.subjectTile, { backgroundColor: palette.bg }]}
-                    onPress={() => tabNav.navigate('Practice', { subjectId: s.id })}
+                    onPress={() => tabNav.navigate('Practice', { subjectId: s.id, topicId: undefined })}
                   >
                     <Text style={[styles.tileName, { color: palette.text }]} numberOfLines={2}>
                       {s.name}
                     </Text>
                     <View style={styles.tileFooter}>
-                      <ConfidenceBars bars={stats.bars} />
+                      <ProgressChart
+                        type={theme.progressChart}
+                        bars={stats.bars}
+                        checkedIn={stats.checkedIn}
+                        total={stats.total}
+                        accentColor={palette.text}
+                        trackColor={palette.bg}
+                      />
                       <Text style={[styles.tileProgress, { color: palette.text }]}>
-                        {stats.checkedIn}/{stats.total}
+                        {checkedInDisplay(stats.checkedIn, stats.total, theme.checkedIn)}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : (
+            /* ── LIST layout ── */
+            <View style={styles.subjectList}>
+              {subjects.map((s, idx) => {
+                const palette = TILE_PALETTE[idx % TILE_PALETTE.length];
+                const stats = subjectStats.get(s.id) ?? { bars: [0,0,0,0,0], checkedIn: 0, total: 0 };
+                const isLast = idx === subjects.length - 1;
+                return (
+                  <Pressable
+                    key={s.id}
+                    style={[styles.subjectListRow, isLast && styles.subjectListRowLast]}
+                    onPress={() => tabNav.navigate('Practice', { subjectId: s.id, topicId: undefined })}
+                  >
+                    {/* Color dot */}
+                    <View style={[styles.subjectListDot, { backgroundColor: palette.bg }]}>
+                      <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: palette.text }} />
+                    </View>
+
+                    {/* Name + progress chart */}
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.subjectListName} numberOfLines={1}>{s.name}</Text>
+                      <ProgressChart
+                        type={theme.progressChart}
+                        bars={stats.bars}
+                        checkedIn={stats.checkedIn}
+                        total={stats.total}
+                        accentColor={theme.colors.accent}
+                        trackColor={theme.colors.divider}
+                      />
+                    </View>
+
+                    {/* CheckedIn badge */}
+                    <View style={styles.subjectListBadge}>
+                      <Text style={styles.subjectListBadgeText}>
+                        {checkedInDisplay(stats.checkedIn, stats.total, theme.checkedIn)}
                       </Text>
                     </View>
                   </Pressable>

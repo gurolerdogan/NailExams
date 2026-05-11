@@ -6,6 +6,9 @@ export const defaultTheme: Theme = {
   description: 'Clean & minimal',
   dark: false,
   previewSwatches: ['#F2F2F7', '#1C1C1E', '#185FA5', '#1D9E75'],
+  subjectPanel: 'tile'  as const,
+  progressChart: 'barchart' as const,
+  checkedIn: 'CtoT' as const,
   colors: {
     screenBg: '#F2F2F7',
     cardBg: '#FFFFFF',

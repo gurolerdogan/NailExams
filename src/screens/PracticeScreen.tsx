@@ -28,7 +28,7 @@ import { logEvent } from '../services/logging/logEvent';
 import type { AppTabParamList } from '../navigation/TabNavigator';
 import EmptyState from '../components/EmptyState';
 import { TILE_PALETTE } from '../constants/palette';
-import type { Theme } from '../themes';
+import type { Theme, ProgressChartType, CheckedInType } from '../themes';
 
 const CONF_BAR_COLORS = ['#E24B4A', '#EF9F27', '#FAC775', '#97C459', '#1D9E75'];
 const CONF_BG         = ['#FCEBEB', '#FAEEDA', '#FEF9C3', '#EAF3DE', '#E1F5EE'];
@@ -38,26 +38,47 @@ type PracticeRoute = RouteProp<AppTabParamList, 'Practice'>;
 
 // ─── Small reusable components ────────────────────────────────────────────────
 
-/** 5-bar confidence chart used on subject tiles — skips topics with confidence === 0 */
-function TileBars({ bars }: { bars: number[] }) {
+/** Theme-aware progress chart for subject tiles/rows */
+function ProgressChart({ type, bars, checkedIn, total, accentColor, trackColor }: {
+  type: ProgressChartType;
+  bars: number[];
+  checkedIn: number;
+  total: number;
+  accentColor: string;
+  trackColor: string;
+}) {
+  if (type === 'barchart') {
+    const max = Math.max(...bars, 1);
+    return (
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 24, flex: 1 }}>
+        {bars.map((count, i) => (
+          <View key={i} style={{ flex: 1, borderRadius: 2, height: Math.max(4, Math.round((Math.max(0.15, count / max)) * 20)), backgroundColor: CONF_BAR_COLORS[i], opacity: count === 0 ? 0.2 : 1 }} />
+        ))}
+      </View>
+    );
+  }
+  if (type === 'progressline') {
+    const pct = total > 0 ? (checkedIn / total) * 100 : 0;
+    return (
+      <View style={{ height: 5, backgroundColor: trackColor, borderRadius: 3, flex: 1, overflow: 'hidden' }}>
+        <View style={{ height: '100%', width: `${pct}%`, backgroundColor: accentColor, borderRadius: 3 }} />
+      </View>
+    );
+  }
+  // colordots
   const max = Math.max(...bars, 1);
   return (
-    <View style={staticStyles.barsRow}>
+    <View style={{ flexDirection: 'row', gap: 3, flex: 1 }}>
       {bars.map((count, i) => (
-        <View
-          key={i}
-          style={[
-            staticStyles.tileBar,
-            {
-              height: Math.max(4, Math.round((count / max) * 20)),
-              backgroundColor: CONF_BAR_COLORS[i],
-              opacity: count === 0 ? 0.2 : 1,
-            },
-          ]}
-        />
+        <View key={i} style={{ flex: 1, height: 10, borderRadius: 3, backgroundColor: CONF_BAR_COLORS[i], opacity: count === 0 ? 0.12 : 0.25 + (count / max) * 0.75 }} />
       ))}
     </View>
   );
+}
+
+function checkedInDisplay(checkedIn: number, total: number, type: CheckedInType): string {
+  if (total === 0) return '—';
+  return type === 'Percent' ? `${Math.round((checkedIn / total) * 100)}%` : `${checkedIn}/${total}`;
 }
 
 /** Stepped bar row used on topic rows — empty (all grey) when confidence is 0 */
@@ -103,9 +124,28 @@ function createStyles(theme: Theme) {
       letterSpacing: theme.fonts.letterSpacingHeading,
     },
 
+    // Tile layout
     subjectGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-    subjectTile: { width: '47.5%', borderRadius: 16, padding: 12, paddingBottom: 10 },
+    subjectTile: { width: '47.5%', borderRadius: theme.radii.tile, padding: 12, paddingBottom: 10 },
     tileName: { fontSize: 13, fontWeight: theme.fonts.bodyWeight, marginBottom: 8, lineHeight: 18, fontFamily: theme.fonts.body },
+    tileFoot: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
+    tileProgress: { fontSize: 11, fontWeight: '600', opacity: 0.6, paddingBottom: 2 },
+
+    // List layout
+    subjectList: { backgroundColor: theme.colors.cardBg, borderRadius: theme.radii.card, overflow: 'hidden' },
+    subjectListRow: {
+      flexDirection: 'row', alignItems: 'center',
+      paddingHorizontal: 14, paddingVertical: 12, gap: 12,
+      borderBottomWidth: 0.5, borderBottomColor: theme.colors.divider,
+    },
+    subjectListRowLast: { borderBottomWidth: 0 },
+    subjectListDot: { width: 30, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+    subjectListName: { fontSize: 14, fontWeight: theme.fonts.bodyWeight, color: theme.colors.textPrimary, fontFamily: theme.fonts.body, marginBottom: 5 },
+    subjectListBadge: {
+      paddingHorizontal: 10, paddingVertical: 4, borderRadius: theme.radii.pill, flexShrink: 0,
+      backgroundColor: theme.dark ? theme.colors.cardBorder : theme.colors.screenBg,
+    },
+    subjectListBadgeText: { fontSize: 12, fontWeight: '700', color: theme.colors.accent, fontFamily: theme.fonts.body },
 
     topicHeader: {
       flexDirection: 'row',
@@ -330,24 +370,38 @@ export default function PracticeScreen() {
     });
   }, [subjectIdFromNav, subjectsKey]);
 
+  // Track which topicId we already opened so allTopics reloads don't re-trigger the sheet.
+  // Reset to null when topicIdFromNav clears (user navigated away without a topicId) so a
+  // future Plan → Practice navigation for the same topic still works.
+  const handledTopicIdRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (!topicIdFromNav || allTopics.length === 0) return;
+    if (!topicIdFromNav) {
+      handledTopicIdRef.current = null; // params cleared — ready for next navigation
+      return;
+    }
+    if (allTopics.length === 0) return;
+    if (topicIdFromNav === handledTopicIdRef.current) return; // already handled this navigation
     const t = allTopics.find((x) => x.id === topicIdFromNav);
-    if (t) openSheet(t);
+    if (t) {
+      handledTopicIdRef.current = topicIdFromNav;
+      openSheet(t);
+    }
   }, [topicIdFromNav, allTopics, openSheet]);
 
   // ── Derived data ──────────────────────────────────────────────────────────────
-  const confidenceBySubject = useMemo(() => {
-    const map = new Map<string, number[]>();
+  const subjectStats = useMemo(() => {
+    const map = new Map<string, { bars: number[]; checkedIn: number; total: number }>();
     for (const s of subjects) {
       const buckets = [0, 0, 0, 0, 0];
+      let checkedIn = 0; let total = 0;
       for (const t of allTopics) {
         if (t.subjectId !== s.id) continue;
+        total++;
         const c = t.confidence ?? 0;
-        // Only count topics that have been checked in (confidence 1-5)
-        if (c >= 1 && c <= 5) buckets[c - 1]++;
+        if (c >= 1 && c <= 5) { buckets[c - 1]++; checkedIn++; }
       }
-      map.set(s.id, buckets);
+      map.set(s.id, { bars: buckets, checkedIn, total });
     }
     return map;
   }, [subjects, allTopics]);
@@ -458,21 +512,46 @@ export default function PracticeScreen() {
           cta="Edit subjects"
           onCta={() => tabNav.navigate('Settings', { screen: 'EditSubjects' })}
         />
-      ) : (
+      ) : theme.subjectPanel === 'tile' ? (
+        /* ── TILE layout ── */
         <View style={styles.subjectGrid}>
           {subjects.map((s, idx) => {
             const palette = TILE_PALETTE[idx % TILE_PALETTE.length];
-            const bars = confidenceBySubject.get(s.id) ?? [0, 0, 0, 0, 0];
+            const stats = subjectStats.get(s.id) ?? { bars: [0,0,0,0,0], checkedIn: 0, total: 0 };
             return (
               <Pressable
                 key={s.id}
                 style={[styles.subjectTile, { backgroundColor: palette.bg }]}
                 onPress={() => setSelectedSubject(s)}
               >
-                <Text style={[styles.tileName, { color: palette.text }]} numberOfLines={2}>
-                  {s.name}
-                </Text>
-                <TileBars bars={bars} />
+                <Text style={[styles.tileName, { color: palette.text }]} numberOfLines={2}>{s.name}</Text>
+                <View style={styles.tileFoot}>
+                  <ProgressChart type={theme.progressChart} bars={stats.bars} checkedIn={stats.checkedIn} total={stats.total} accentColor={palette.text} trackColor={palette.bg} />
+                  <Text style={[styles.tileProgress, { color: palette.text }]}>{checkedInDisplay(stats.checkedIn, stats.total, theme.checkedIn)}</Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : (
+        /* ── LIST layout ── */
+        <View style={styles.subjectList}>
+          {subjects.map((s, idx) => {
+            const palette = TILE_PALETTE[idx % TILE_PALETTE.length];
+            const stats = subjectStats.get(s.id) ?? { bars: [0,0,0,0,0], checkedIn: 0, total: 0 };
+            const isLast = idx === subjects.length - 1;
+            return (
+              <Pressable key={s.id} style={[styles.subjectListRow, isLast && styles.subjectListRowLast]} onPress={() => setSelectedSubject(s)}>
+                <View style={[styles.subjectListDot, { backgroundColor: palette.bg }]}>
+                  <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: palette.text }} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.subjectListName} numberOfLines={1}>{s.name}</Text>
+                  <ProgressChart type={theme.progressChart} bars={stats.bars} checkedIn={stats.checkedIn} total={stats.total} accentColor={theme.colors.accent} trackColor={theme.colors.divider} />
+                </View>
+                <View style={styles.subjectListBadge}>
+                  <Text style={styles.subjectListBadgeText}>{checkedInDisplay(stats.checkedIn, stats.total, theme.checkedIn)}</Text>
+                </View>
               </Pressable>
             );
           })}
