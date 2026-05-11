@@ -84,9 +84,11 @@ export default function OnboardingSubjectsScreen({ navigation, route }: Props) {
         </View>
 
         {/* Step dots */}
+        {/* Step dots — step 2 of 4 */}
         <View style={styles.dots}>
           <View style={styles.dot} />
           <View style={[styles.dot, styles.dotActive]} />
+          <View style={styles.dot} />
           <View style={styles.dot} />
         </View>
 
