@@ -12,6 +12,7 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import type { ExamLevel, Subject } from '../types/models';
 import { saveSubjects } from '../services/storage/nailexamsStorage';
 import { loadPlan } from '../services/storage/planStorage';
@@ -22,6 +23,7 @@ import { preloadGcseTopicsForSubjects } from '../services/seed/preloadGcseTopics
 import { GCSE_SUBJECT_PRESETS } from '../data/gcseTopicCatalog';
 import type { SettingsStackParamList } from '../navigation/SettingsNavigator';
 import { TILE_PALETTE } from '../constants/palette';
+import type { Theme } from '../themes';
 
 type Props = NativeStackScreenProps<SettingsStackParamList, 'EditSubjects'>;
 
@@ -34,10 +36,136 @@ function presetsFor(level: ExamLevel) {
   return level === 'GCSE' ? GCSE_SUBJECT_PRESETS : ALEVEL_PRESETS;
 }
 
+function createStyles(theme: Theme) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: theme.colors.screenBg },
+    scroll: { flex: 1 },
+    content: { padding: 16, paddingBottom: 8 },
+
+    hint: {
+      fontSize: 12,
+      color: theme.colors.sectionLabel,
+      marginBottom: 14,
+      fontWeight: '500',
+    },
+
+    grid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 10,
+    },
+    tile: {
+      width: '30.5%',
+      borderRadius: 16,
+      padding: 10,
+      paddingBottom: 12,
+      alignItems: 'center',
+      borderWidth: 2,
+      borderColor: 'transparent',
+      minHeight: 80,
+      justifyContent: 'flex-start',
+      gap: 6,
+    },
+    tileSelected: {
+      borderColor: theme.colors.buttonPrimaryBg,
+    },
+    indicator: {
+      width: 18,
+      height: 18,
+      borderRadius: 9,
+      borderWidth: 1.5,
+      borderColor: theme.colors.cardBorder,
+      backgroundColor: theme.colors.cardBg,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    indicatorSelected: {
+      borderColor: theme.colors.buttonPrimaryBg,
+      backgroundColor: theme.colors.buttonPrimaryBg,
+    },
+    indicatorDot: {
+      width: 7,
+      height: 7,
+      borderRadius: 3.5,
+      backgroundColor: theme.colors.buttonPrimaryText,
+    },
+    tileName: {
+      fontSize: 11,
+      fontWeight: '600',
+      textAlign: 'center',
+      lineHeight: 15,
+    },
+
+    customSection: {
+      marginTop: 24,
+      marginBottom: 8,
+    },
+    customLabel: {
+      fontSize: 12,
+      fontWeight: '500',
+      color: theme.colors.sectionLabel,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+      marginBottom: 8,
+    },
+    customRow: {
+      flexDirection: 'row',
+      gap: 8,
+    },
+    customInput: {
+      flex: 1,
+      backgroundColor: theme.colors.inputBg,
+      borderRadius: theme.radii.input,
+      borderWidth: 0.5,
+      borderColor: theme.colors.inputBorder,
+      paddingHorizontal: 14,
+      paddingVertical: 11,
+      fontSize: 14,
+      color: theme.colors.inputText,
+    },
+    addBtn: {
+      backgroundColor: theme.colors.buttonPrimaryBg,
+      borderRadius: theme.radii.button,
+      paddingHorizontal: 18,
+      justifyContent: 'center',
+    },
+    addBtnText: {
+      color: theme.colors.buttonPrimaryText,
+      fontSize: 14,
+      fontWeight: '600',
+    },
+
+    footer: {
+      padding: 16,
+      paddingBottom: 24,
+      backgroundColor: theme.colors.screenBg,
+      borderTopWidth: 0.5,
+      borderTopColor: theme.colors.cardBorder,
+    },
+    saveBtn: {
+      backgroundColor: theme.colors.buttonPrimaryBg,
+      borderRadius: 16,
+      paddingVertical: 15,
+      alignItems: 'center',
+    },
+    saveBtnText: {
+      color: theme.colors.buttonPrimaryText,
+      fontSize: 15,
+      fontWeight: '600',
+    },
+
+    emptyText: { flex: 1, textAlign: 'center', marginTop: 40, color: theme.colors.textMuted },
+    container: { flex: 1, padding: 16 },
+  });
+}
+
 export default function EditSubjectsScreen({ navigation }: Props) {
   const { profile, subjects, refreshUserData } = useAuth();
+  const { theme } = useTheme();
   const level = profile?.examLevel;
   const presets = useMemo(() => (level ? presetsFor(level) : []), [level]);
+
+  const styles = useMemo(() => createStyles(theme), [theme]);
 
   const [selected, setSelected] = useState<Set<string>>(
     new Set(subjects.map((s) => s.name)),
@@ -174,7 +302,7 @@ export default function EditSubjectsScreen({ navigation }: Props) {
               value={customInput}
               onChangeText={setCustomInput}
               placeholder="e.g. Psychology"
-              placeholderTextColor="#AAA"
+              placeholderTextColor={theme.colors.textMuted}
               autoCapitalize="words"
               onSubmitEditing={addCustom}
               returnKeyType="done"
@@ -205,124 +333,3 @@ export default function EditSubjectsScreen({ navigation }: Props) {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#F2F2F7' },
-  scroll: { flex: 1 },
-  content: { padding: 16, paddingBottom: 8 },
-
-  hint: {
-    fontSize: 12,
-    color: '#888',
-    marginBottom: 14,
-    fontWeight: '500',
-  },
-
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  tile: {
-    width: '30.5%',
-    borderRadius: 16,
-    padding: 10,
-    paddingBottom: 12,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'transparent',
-    minHeight: 80,
-    justifyContent: 'flex-start',
-    gap: 6,
-  },
-  tileSelected: {
-    borderColor: '#1C1C1E',
-  },
-  indicator: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 1.5,
-    borderColor: '#CCC',
-    backgroundColor: '#FFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  indicatorSelected: {
-    borderColor: '#1C1C1E',
-    backgroundColor: '#1C1C1E',
-  },
-  indicatorDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    backgroundColor: '#FFF',
-  },
-  tileName: {
-    fontSize: 11,
-    fontWeight: '600',
-    textAlign: 'center',
-    lineHeight: 15,
-  },
-
-  customSection: {
-    marginTop: 24,
-    marginBottom: 8,
-  },
-  customLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#888',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 8,
-  },
-  customRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  customInput: {
-    flex: 1,
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    borderWidth: 0.5,
-    borderColor: '#DDD',
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    fontSize: 14,
-    color: '#1C1C1E',
-  },
-  addBtn: {
-    backgroundColor: '#1C1C1E',
-    borderRadius: 12,
-    paddingHorizontal: 18,
-    justifyContent: 'center',
-  },
-  addBtnText: {
-    color: '#FFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-
-  footer: {
-    padding: 16,
-    paddingBottom: 24,
-    backgroundColor: '#F2F2F7',
-    borderTopWidth: 0.5,
-    borderTopColor: '#E0E0E0',
-  },
-  saveBtn: {
-    backgroundColor: '#1C1C1E',
-    borderRadius: 16,
-    paddingVertical: 15,
-    alignItems: 'center',
-  },
-  saveBtnText: {
-    color: '#FFF',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-
-  emptyText: { flex: 1, textAlign: 'center', marginTop: 40, color: '#888' },
-  container: { flex: 1, padding: 16 },
-});

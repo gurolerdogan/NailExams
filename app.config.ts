@@ -13,6 +13,12 @@ export default (): ExpoConfig => {
     icon: './assets/icon.png',
     userInterfaceStyle: 'light',
     newArchEnabled: true,
+    plugins: [
+      'expo-web-browser',
+      ['@react-native-google-signin/google-signin', {
+        iosUrlScheme: 'com.googleusercontent.apps.948483076530-npmq65i0lqnk6cah7trig8aainjgknmt',
+      }],
+    ],
     splash: {
       image: './assets/splash.png',
       resizeMode: 'cover',
@@ -22,6 +28,8 @@ export default (): ExpoConfig => {
       bundleIdentifier: 'com.gurolerdogan.nailexams',
       buildNumber: '1',
       supportsTablet: false,
+      usesAppleSignIn: true,
+      googleServicesFile: './GoogleService-Info.plist',
       infoPlist: {
         NSCameraUsageDescription: 'NailExams does not use the camera.',
         CFBundleDisplayName: 'NailExams',
@@ -52,6 +60,8 @@ export default (): ExpoConfig => {
         messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
         appId: process.env.FIREBASE_APP_ID,
       },
+      googleIosClientId:     process.env.GOOGLE_IOS_CLIENT_ID,
+      googleWebClientId:     process.env.GOOGLE_WEB_CLIENT_ID,
     },
   };
 };

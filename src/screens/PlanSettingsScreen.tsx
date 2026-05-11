@@ -16,6 +16,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { loadTopics } from '../services/storage/nailexamsStorage';
 import { loadPlanConfig, savePlanConfig, savePlan } from '../services/storage/planStorage';
 import { generatePlan } from '../services/plan/generateWeeklyPlan';
@@ -26,6 +27,7 @@ import type { PlanConfig, PlanSession, TopicOrder, WeeklyPlan } from '../types/p
 import type { Topic } from '../types/models';
 import type { AppTabParamList } from '../navigation/TabNavigator';
 import { TILE_PALETTE } from '../constants/palette';
+import type { Theme } from '../themes';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -71,13 +73,192 @@ function dayOfWeekMon(date: Date): number {
   return (date.getDay() + 6) % 7; // Mon=0 … Sun=6
 }
 
+function createStyles(theme: Theme) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: theme.colors.screenBg },
+    content: { padding: 16, paddingBottom: 48 },
+
+    // Mode pill
+    modePill: {
+      flexDirection: 'row',
+      backgroundColor: theme.colors.pillSwitcherBg,
+      borderRadius: 12,
+      padding: 3,
+      marginBottom: 4,
+    },
+    modeOption: {
+      flex: 1, paddingVertical: 9, borderRadius: 10, alignItems: 'center',
+    },
+    modeOptionActive: { backgroundColor: theme.colors.buttonPrimaryBg },
+    modeOptionText: { fontSize: 13, fontWeight: '500', color: theme.colors.pillInactiveText },
+    modeOptionTextActive: { color: theme.colors.buttonPrimaryText },
+
+    // Section label
+    sectionLabel: {
+      fontSize: 11, fontWeight: '600', textTransform: 'uppercase',
+      letterSpacing: 0.6, color: theme.colors.sectionLabel,
+      marginTop: 24, marginBottom: 8, marginLeft: 2,
+    },
+
+    // Chips
+    chipRow: { flexDirection: 'row', gap: 8 },
+    chip: {
+      flex: 1, backgroundColor: theme.colors.cardBg, borderRadius: theme.radii.button, paddingVertical: 11,
+      alignItems: 'center', borderWidth: 1, borderColor: theme.colors.cardBorder,
+    },
+    chipSquare: {
+      width: 60, height: 48, backgroundColor: theme.colors.cardBg, borderRadius: theme.radii.button,
+      alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: theme.colors.cardBorder,
+    },
+    chipActive: { backgroundColor: theme.colors.buttonPrimaryBg, borderColor: theme.colors.buttonPrimaryBg },
+    chipText: { fontSize: 14, fontWeight: '500', color: theme.colors.textPrimary },
+    chipTextActive: { color: theme.colors.buttonPrimaryText },
+
+    // Auto — subjects card
+    card: { backgroundColor: theme.colors.cardBg, borderRadius: 16, overflow: 'hidden' },
+    subjectRow: {
+      flexDirection: 'row', alignItems: 'center',
+      paddingHorizontal: 14, paddingVertical: 12, gap: 10,
+      borderBottomWidth: 0.5, borderBottomColor: theme.colors.divider,
+    },
+    subjectRowLast: { borderBottomWidth: 0 },
+    subjectDot: {
+      width: 28, height: 28, borderRadius: 8,
+      alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    },
+    subjectDotInner: { width: 8, height: 8, borderRadius: 4 },
+    subjectName: { flex: 1, fontSize: 14, fontWeight: '500', color: theme.colors.textPrimary },
+    subjectCount: { fontSize: 12, color: theme.colors.textMuted },
+    checkbox: {
+      width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, borderColor: theme.colors.cardBorder,
+      alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    },
+    checkboxChecked: { backgroundColor: theme.colors.buttonPrimaryBg, borderColor: theme.colors.buttonPrimaryBg },
+    checkmark: { fontSize: 12, color: theme.colors.buttonPrimaryText, fontWeight: '700' },
+    emptyHint: { padding: 16, fontSize: 13, color: theme.colors.textMuted, textAlign: 'center' },
+
+    // Auto — topic order cards
+    orderCard: {
+      flexDirection: 'row', alignItems: 'flex-start', gap: 12,
+      backgroundColor: theme.colors.cardBg, borderRadius: 14, padding: 14, marginBottom: 8,
+      borderWidth: 1.5, borderColor: 'transparent',
+    },
+    orderCardActive: { borderColor: theme.colors.buttonPrimaryBg },
+    orderTitle: { fontSize: 14, fontWeight: '600', color: theme.colors.textPrimary, marginBottom: 3 },
+    orderDesc: { fontSize: 12, color: theme.colors.textSecondary, lineHeight: 18 },
+    radio: {
+      width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: theme.colors.cardBorder,
+      alignItems: 'center', justifyContent: 'center', marginTop: 1, flexShrink: 0,
+    },
+    radioSelected: { borderColor: theme.colors.buttonPrimaryBg },
+    radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: theme.colors.buttonPrimaryBg },
+
+    estimate: {
+      textAlign: 'center', fontSize: 12, color: theme.colors.textSecondary,
+      marginTop: 16, marginBottom: 8, lineHeight: 18,
+    },
+    warning: { textAlign: 'center', fontSize: 12, color: '#E24B4A', marginTop: 16, marginBottom: 8 },
+
+    // Shared primary button
+    primaryBtn: {
+      backgroundColor: theme.colors.buttonPrimaryBg, borderRadius: 16, paddingVertical: 15,
+      alignItems: 'center', marginTop: 8,
+    },
+    primaryBtnDisabled: { opacity: 0.4 },
+    primaryBtnText: { fontSize: 15, fontWeight: '600', color: theme.colors.buttonPrimaryText },
+
+    // Manual — calendar
+    calendarCard: { backgroundColor: theme.colors.cardBg, borderRadius: 16, padding: 14 },
+    monthHeader: {
+      flexDirection: 'row', alignItems: 'center',
+      justifyContent: 'space-between', marginBottom: 10,
+    },
+    monthNavBtn: { padding: 6 },
+    monthNavText: { fontSize: 22, color: '#185FA5', fontWeight: '300' },
+    monthLabel: { fontSize: 14, fontWeight: '600', color: theme.colors.textPrimary },
+    calGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+    calDayHeader: {
+      width: '14.28%', textAlign: 'center', fontSize: 10,
+      fontWeight: '500', color: theme.colors.textMuted, paddingBottom: 6,
+    },
+    calDayCell: {
+      width: '14.28%', aspectRatio: 1,
+      alignItems: 'center', justifyContent: 'center', borderRadius: 8,
+    },
+    calDayCellOut: { opacity: 0.2 },
+    calDayCellToday: { backgroundColor: theme.colors.buttonPrimaryBg },
+    calDayCellActive: { backgroundColor: '#185FA5' },
+    calDayCellHas: { backgroundColor: theme.colors.divider },
+    calDayCellText: { fontSize: 11, fontWeight: '500', color: theme.colors.textPrimary },
+    calDayCellTextOut: { color: theme.colors.textMuted },
+    calDayCellTextToday: { color: theme.colors.buttonPrimaryText },
+    calDayCellTextActive: { color: '#FFF' },
+    dotRow: { flexDirection: 'row', gap: 2, marginTop: 1 },
+    dot: { width: 4, height: 4, borderRadius: 2 },
+
+    manualCount: {
+      textAlign: 'center', fontSize: 12, color: theme.colors.textSecondary,
+      marginTop: 14, marginBottom: 4, lineHeight: 18,
+    },
+
+    // Sheet
+    sheetOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
+    sheet: {
+      backgroundColor: theme.colors.cardBg, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+      paddingTop: 12, height: SHEET_HEIGHT,
+    },
+    sheetHandle: {
+      width: 36, height: 4, backgroundColor: theme.colors.cardBorder, borderRadius: 2,
+      alignSelf: 'center', marginBottom: 12,
+    },
+    sheetHeader: {
+      flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
+      paddingHorizontal: 16, paddingBottom: 12,
+      borderBottomWidth: 0.5, borderBottomColor: theme.colors.divider,
+    },
+    sheetTitle: { fontSize: 16, fontWeight: '600', color: theme.colors.textPrimary },
+    sheetSubtitle: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 2 },
+    sheetDoneBtn: {
+      backgroundColor: theme.colors.buttonPrimaryBg, borderRadius: 10,
+      paddingHorizontal: 14, paddingVertical: 7, marginTop: 2,
+    },
+    sheetDoneBtnText: { fontSize: 13, fontWeight: '600', color: theme.colors.buttonPrimaryText },
+    sheetScroll: { flex: 1 },
+    sheetEmpty: {
+      textAlign: 'center', color: theme.colors.textMuted, fontSize: 13, padding: 32,
+    },
+    sheetSubjectHeader: {
+      flexDirection: 'row', alignItems: 'center', gap: 8,
+      paddingHorizontal: 16, paddingVertical: 8, marginTop: 6,
+    },
+    sheetSubjectDot: { width: 8, height: 8, borderRadius: 4 },
+    sheetSubjectName: {
+      fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5,
+    },
+    sheetTopicRow: {
+      flexDirection: 'row', alignItems: 'center',
+      paddingHorizontal: 16, paddingVertical: 13,
+      backgroundColor: theme.colors.cardBg,
+      borderBottomWidth: 0.5, borderBottomColor: theme.colors.divider,
+    },
+    sheetTopicRowSelected: { backgroundColor: '#F0FDF4' },
+    sheetTopicRowLast: { borderBottomWidth: 0 },
+    sheetTopicName: { flex: 1, fontSize: 14, color: theme.colors.textPrimary },
+    sheetTopicNameSelected: { color: '#1D9E75', fontWeight: '500' },
+    sheetTopicCheck: { fontSize: 15, color: '#1D9E75', fontWeight: '700', marginLeft: 8 },
+  });
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 type PlanMode = 'auto' | 'manual';
 
 export default function PlanSettingsScreen() {
   const { subjects } = useAuth();
+  const { theme } = useTheme();
   const tabNav = useNavigation<BottomTabNavigationProp<AppTabParamList>>();
+
+  const styles = useMemo(() => createStyles(theme), [theme]);
 
   // ── shared ───────────────────────────────────────────────────────────────────
   const [planMode, setPlanMode] = useState<PlanMode>('auto');
@@ -633,178 +814,3 @@ export default function PlanSettingsScreen() {
     </>
   );
 }
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F2F2F7' },
-  content: { padding: 16, paddingBottom: 48 },
-
-  // Mode pill
-  modePill: {
-    flexDirection: 'row',
-    backgroundColor: '#E0E0E8',
-    borderRadius: 12,
-    padding: 3,
-    marginBottom: 4,
-  },
-  modeOption: {
-    flex: 1, paddingVertical: 9, borderRadius: 10, alignItems: 'center',
-  },
-  modeOptionActive: { backgroundColor: '#1C1C1E' },
-  modeOptionText: { fontSize: 13, fontWeight: '500', color: '#888' },
-  modeOptionTextActive: { color: '#FFF' },
-
-  // Section label
-  sectionLabel: {
-    fontSize: 11, fontWeight: '600', textTransform: 'uppercase',
-    letterSpacing: 0.6, color: '#888',
-    marginTop: 24, marginBottom: 8, marginLeft: 2,
-  },
-
-  // Chips
-  chipRow: { flexDirection: 'row', gap: 8 },
-  chip: {
-    flex: 1, backgroundColor: '#FFF', borderRadius: 12, paddingVertical: 11,
-    alignItems: 'center', borderWidth: 1, borderColor: '#E0E0E6',
-  },
-  chipSquare: {
-    width: 60, height: 48, backgroundColor: '#FFF', borderRadius: 12,
-    alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#E0E0E6',
-  },
-  chipActive: { backgroundColor: '#1C1C1E', borderColor: '#1C1C1E' },
-  chipText: { fontSize: 14, fontWeight: '500', color: '#1C1C1E' },
-  chipTextActive: { color: '#FFF' },
-
-  // Auto — subjects card
-  card: { backgroundColor: '#FFF', borderRadius: 16, overflow: 'hidden' },
-  subjectRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 14, paddingVertical: 12, gap: 10,
-    borderBottomWidth: 0.5, borderBottomColor: '#F0F0F0',
-  },
-  subjectRowLast: { borderBottomWidth: 0 },
-  subjectDot: {
-    width: 28, height: 28, borderRadius: 8,
-    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-  },
-  subjectDotInner: { width: 8, height: 8, borderRadius: 4 },
-  subjectName: { flex: 1, fontSize: 14, fontWeight: '500', color: '#1C1C1E' },
-  subjectCount: { fontSize: 12, color: '#AAA' },
-  checkbox: {
-    width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, borderColor: '#C7C7CC',
-    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-  },
-  checkboxChecked: { backgroundColor: '#1C1C1E', borderColor: '#1C1C1E' },
-  checkmark: { fontSize: 12, color: '#FFF', fontWeight: '700' },
-  emptyHint: { padding: 16, fontSize: 13, color: '#AAA', textAlign: 'center' },
-
-  // Auto — topic order cards
-  orderCard: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 12,
-    backgroundColor: '#FFF', borderRadius: 14, padding: 14, marginBottom: 8,
-    borderWidth: 1.5, borderColor: 'transparent',
-  },
-  orderCardActive: { borderColor: '#1C1C1E' },
-  orderTitle: { fontSize: 14, fontWeight: '600', color: '#1C1C1E', marginBottom: 3 },
-  orderDesc: { fontSize: 12, color: '#888', lineHeight: 18 },
-  radio: {
-    width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: '#C7C7CC',
-    alignItems: 'center', justifyContent: 'center', marginTop: 1, flexShrink: 0,
-  },
-  radioSelected: { borderColor: '#1C1C1E' },
-  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#1C1C1E' },
-
-  estimate: {
-    textAlign: 'center', fontSize: 12, color: '#888',
-    marginTop: 16, marginBottom: 8, lineHeight: 18,
-  },
-  warning: { textAlign: 'center', fontSize: 12, color: '#E24B4A', marginTop: 16, marginBottom: 8 },
-
-  // Shared primary button
-  primaryBtn: {
-    backgroundColor: '#1C1C1E', borderRadius: 16, paddingVertical: 15,
-    alignItems: 'center', marginTop: 8,
-  },
-  primaryBtnDisabled: { opacity: 0.4 },
-  primaryBtnText: { fontSize: 15, fontWeight: '600', color: '#FFF' },
-
-  // Manual — calendar
-  calendarCard: { backgroundColor: '#FFF', borderRadius: 16, padding: 14 },
-  monthHeader: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', marginBottom: 10,
-  },
-  monthNavBtn: { padding: 6 },
-  monthNavText: { fontSize: 22, color: '#185FA5', fontWeight: '300' },
-  monthLabel: { fontSize: 14, fontWeight: '600', color: '#1C1C1E' },
-  calGrid: { flexDirection: 'row', flexWrap: 'wrap' },
-  calDayHeader: {
-    width: '14.28%', textAlign: 'center', fontSize: 10,
-    fontWeight: '500', color: '#AAA', paddingBottom: 6,
-  },
-  calDayCell: {
-    width: '14.28%', aspectRatio: 1,
-    alignItems: 'center', justifyContent: 'center', borderRadius: 8,
-  },
-  calDayCellOut: { opacity: 0.2 },
-  calDayCellToday: { backgroundColor: '#1C1C1E' },
-  calDayCellActive: { backgroundColor: '#185FA5' },
-  calDayCellHas: { backgroundColor: '#F0F0F5' },
-  calDayCellText: { fontSize: 11, fontWeight: '500', color: '#1C1C1E' },
-  calDayCellTextOut: { color: '#AAA' },
-  calDayCellTextToday: { color: '#FFF' },
-  calDayCellTextActive: { color: '#FFF' },
-  dotRow: { flexDirection: 'row', gap: 2, marginTop: 1 },
-  dot: { width: 4, height: 4, borderRadius: 2 },
-
-  manualCount: {
-    textAlign: 'center', fontSize: 12, color: '#888',
-    marginTop: 14, marginBottom: 4, lineHeight: 18,
-  },
-
-  // Sheet
-  sheetOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
-  sheet: {
-    backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    paddingTop: 12, height: SHEET_HEIGHT,
-  },
-  sheetHandle: {
-    width: 36, height: 4, backgroundColor: '#DDD', borderRadius: 2,
-    alignSelf: 'center', marginBottom: 12,
-  },
-  sheetHeader: {
-    flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingBottom: 12,
-    borderBottomWidth: 0.5, borderBottomColor: '#F0F0F0',
-  },
-  sheetTitle: { fontSize: 16, fontWeight: '600', color: '#1C1C1E' },
-  sheetSubtitle: { fontSize: 12, color: '#888', marginTop: 2 },
-  sheetDoneBtn: {
-    backgroundColor: '#1C1C1E', borderRadius: 10,
-    paddingHorizontal: 14, paddingVertical: 7, marginTop: 2,
-  },
-  sheetDoneBtnText: { fontSize: 13, fontWeight: '600', color: '#FFF' },
-  sheetScroll: { flex: 1 },
-  sheetEmpty: {
-    textAlign: 'center', color: '#AAA', fontSize: 13, padding: 32,
-  },
-  sheetSubjectHeader: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 16, paddingVertical: 8, marginTop: 6,
-  },
-  sheetSubjectDot: { width: 8, height: 8, borderRadius: 4 },
-  sheetSubjectName: {
-    fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5,
-  },
-  sheetTopicRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 13,
-    backgroundColor: '#FFF',
-    borderBottomWidth: 0.5, borderBottomColor: '#F5F5F5',
-  },
-  sheetTopicRowSelected: { backgroundColor: '#F0FDF4' },
-  sheetTopicRowLast: { borderBottomWidth: 0 },
-  sheetTopicName: { flex: 1, fontSize: 14, color: '#1C1C1E' },
-  sheetTopicNameSelected: { color: '#1D9E75', fontWeight: '500' },
-  sheetTopicCheck: { fontSize: 15, color: '#1D9E75', fontWeight: '700', marginLeft: 8 },
-});

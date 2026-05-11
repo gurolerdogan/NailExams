@@ -1,12 +1,14 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { wipeAll, loadTopics } from '../services/storage/nailexamsStorage';
 import { loadAttempts } from '../services/storage/practiceStorage';
 import { logEvent } from '../services/logging/logEvent';
 import { getAppEnv } from '../firebase/config';
+import type { Theme } from '../themes';
 
 const IS_DEV = getAppEnv() === 'development';
 import type { SettingsStackParamList } from '../navigation/SettingsNavigator';
@@ -14,8 +16,8 @@ import type { SettingsStackParamList } from '../navigation/SettingsNavigator';
 type Props = NativeStackScreenProps<SettingsStackParamList, 'SettingsHome'>;
 
 // Chevron icon
-function Chevron() {
-  return <Text style={styles.chevron}>›</Text>;
+function Chevron({ color }: { color: string }) {
+  return <Text style={{ fontSize: 18, color, fontWeight: '300' }}>›</Text>;
 }
 
 // Single menu row
@@ -27,6 +29,7 @@ function MenuRow({
   muted,
   onPress,
   showChevron = true,
+  styles,
 }: {
   icon: string;
   iconBg: string;
@@ -35,6 +38,7 @@ function MenuRow({
   muted?: boolean;
   onPress: () => void;
   showChevron?: boolean;
+  styles: ReturnType<typeof createStyles>;
 }) {
   return (
     <Pressable
@@ -53,13 +57,122 @@ function MenuRow({
       >
         {label}
       </Text>
-      {showChevron && !destructive && <Chevron />}
+      {showChevron && !destructive && <Chevron color={styles.chevronColor} />}
     </Pressable>
   );
 }
 
+function createStyles(theme: Theme) {
+  return {
+    ...StyleSheet.create({
+      container: { flex: 1, backgroundColor: theme.colors.screenBg },
+      content: { padding: 16, paddingBottom: 40 },
+
+      screenTitle: { fontSize: 22, fontWeight: theme.fonts.headingWeight as any, color: theme.colors.textPrimary, marginBottom: 16, fontFamily: theme.fonts.heading, letterSpacing: theme.fonts.letterSpacingHeading },
+
+      // Profile card
+      profileCard: {
+        backgroundColor: theme.colors.profileCardBg,
+        borderRadius: theme.radii.card,
+        padding: 16,
+        flexDirection: 'row' as const,
+        alignItems: 'center' as const,
+        gap: 14,
+        marginBottom: 10,
+      },
+      avatar: {
+        width: 46,
+        height: 46,
+        borderRadius: 23,
+        backgroundColor: '#333',
+        alignItems: 'center' as const,
+        justifyContent: 'center' as const,
+        flexShrink: 0,
+      },
+      avatarText: { fontSize: 18, fontWeight: '600' as const, color: theme.colors.profileCardText },
+      profileInfo: { flex: 1, minWidth: 0 },
+      profileEmail: { fontSize: 13, fontWeight: '500' as const, color: theme.colors.profileCardText },
+      profileMeta: { fontSize: 11, color: theme.colors.profileCardMeta, marginTop: 3 },
+      levelBadge: {
+        backgroundColor: theme.colors.profileBadgeBg,
+        borderRadius: theme.radii.input,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        flexShrink: 0,
+      },
+      levelBadgeText: { fontSize: 11, fontWeight: '500' as const, color: theme.colors.profileBadgeText },
+
+      // Stats row
+      statsRow: { flexDirection: 'row' as const, gap: 8, marginBottom: 20 },
+      statCard: {
+        flex: 1,
+        backgroundColor: theme.colors.cardBg,
+        borderRadius: 14,
+        padding: 10,
+      },
+      statVal: { fontSize: 20, fontWeight: '600' as const, color: theme.colors.textPrimary },
+      statLabel: { fontSize: 11, color: theme.colors.textMuted, marginTop: 1 },
+
+      // Section label
+      sectionLabel: {
+        fontSize: 11,
+        fontWeight: '500' as const,
+        textTransform: 'uppercase' as const,
+        letterSpacing: 0.6,
+        color: theme.colors.sectionLabel,
+        marginBottom: 6,
+        marginLeft: 4,
+      },
+
+      // Menu group
+      menuGroup: {
+        backgroundColor: theme.colors.cardBg,
+        borderRadius: 16,
+        overflow: 'hidden' as const,
+        marginBottom: 20,
+      },
+      menuDivider: {
+        height: 0.5,
+        backgroundColor: theme.colors.divider,
+        marginLeft: 56,
+      },
+      menuRow: {
+        flexDirection: 'row' as const,
+        alignItems: 'center' as const,
+        paddingHorizontal: 14,
+        paddingVertical: 11,
+        gap: 12,
+      },
+      menuRowPressed: { backgroundColor: theme.colors.divider },
+      menuIcon: {
+        width: 30,
+        height: 30,
+        borderRadius: 8,
+        alignItems: 'center' as const,
+        justifyContent: 'center' as const,
+        flexShrink: 0,
+      },
+      menuIconText: { fontSize: 15 },
+      menuLabel: { flex: 1, fontSize: 14, fontWeight: theme.fonts.bodyWeight as any, color: theme.colors.textPrimary, fontFamily: theme.fonts.body },
+      menuLabelDestructive: { color: '#E24B4A' },
+      menuLabelMuted: { fontSize: 13, fontWeight: '400' as const },
+
+      versionText: {
+        textAlign: 'center' as const,
+        fontSize: 12,
+        color: theme.colors.textMuted,
+        marginTop: 4,
+      },
+    }),
+    chevronColor: theme.colors.textMuted,
+  };
+}
+
 export default function SettingsScreen({ navigation }: Props) {
+  const { theme } = useTheme();
   const { user, profile, subjects, logout, refreshOnboarding, refreshUserData } = useAuth();
+
+  const styles = useMemo(() => createStyles(theme), [theme]);
 
   const [topicCount, setTopicCount]     = useState(0);
   const [checkinCount, setCheckinCount] = useState(0);
@@ -154,6 +267,7 @@ export default function SettingsScreen({ navigation }: Props) {
           iconBg="#EAF3DE"
           label="Edit subjects"
           onPress={() => navigation.navigate('EditSubjects')}
+          styles={styles}
         />
         <View style={styles.menuDivider} />
         <MenuRow
@@ -161,6 +275,15 @@ export default function SettingsScreen({ navigation }: Props) {
           iconBg="#E6F1FB"
           label="Plan settings"
           onPress={() => navigation.navigate('PlanSettings')}
+          styles={styles}
+        />
+        <View style={styles.menuDivider} />
+        <MenuRow
+          icon="🎨"
+          iconBg="#F3E8FF"
+          label="Theme"
+          onPress={() => navigation.navigate('ThemeSelector')}
+          styles={styles}
         />
       </View>
 
@@ -174,6 +297,7 @@ export default function SettingsScreen({ navigation }: Props) {
           destructive
           showChevron={false}
           onPress={onLogout}
+          styles={styles}
         />
       </View>
 
@@ -188,6 +312,7 @@ export default function SettingsScreen({ navigation }: Props) {
               label="View logs"
               muted
               onPress={() => navigation.navigate('Logs')}
+              styles={styles}
             />
             <View style={styles.menuDivider} />
             <MenuRow
@@ -198,6 +323,7 @@ export default function SettingsScreen({ navigation }: Props) {
               muted
               showChevron={false}
               onPress={onReset}
+              styles={styles}
             />
           </View>
         </>
@@ -207,105 +333,3 @@ export default function SettingsScreen({ navigation }: Props) {
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F2F2F7' },
-  content: { padding: 16, paddingBottom: 40 },
-
-  screenTitle: { fontSize: 22, fontWeight: '600', color: '#1C1C1E', marginBottom: 16 },
-
-  // Profile card
-  profileCard: {
-    backgroundColor: '#1C1C1E',
-    borderRadius: 18,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    marginBottom: 10,
-  },
-  avatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: '#333',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  avatarText: { fontSize: 18, fontWeight: '600', color: '#FFF' },
-  profileInfo: { flex: 1, minWidth: 0 },
-  profileEmail: { fontSize: 13, fontWeight: '500', color: '#FFF' },
-  profileMeta: { fontSize: 11, color: '#AAA', marginTop: 3 },
-  levelBadge: {
-    backgroundColor: '#2C2C2E',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    flexShrink: 0,
-  },
-  levelBadgeText: { fontSize: 11, fontWeight: '500', color: '#98D7C2' },
-
-  // Stats row
-  statsRow: { flexDirection: 'row', gap: 8, marginBottom: 20 },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#FFF',
-    borderRadius: 14,
-    padding: 10,
-  },
-  statVal: { fontSize: 20, fontWeight: '600', color: '#1C1C1E' },
-  statLabel: { fontSize: 11, color: '#888', marginTop: 1 },
-
-  // Section label
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: '500',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    color: '#888',
-    marginBottom: 6,
-    marginLeft: 4,
-  },
-
-  // Menu group
-  menuGroup: {
-    backgroundColor: '#FFF',
-    borderRadius: 16,
-    overflow: 'hidden',
-    marginBottom: 20,
-  },
-  menuDivider: {
-    height: 0.5,
-    backgroundColor: '#F0F0F0',
-    marginLeft: 56, // aligns with label, not icon
-  },
-  menuRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    gap: 12,
-  },
-  menuRowPressed: { backgroundColor: '#F5F5F5' },
-  menuIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  menuIconText: { fontSize: 15 },
-  menuLabel: { flex: 1, fontSize: 14, fontWeight: '500', color: '#1C1C1E' },
-  menuLabelDestructive: { color: '#E24B4A' },
-  menuLabelMuted: { fontSize: 13, fontWeight: '400' },
-  chevron: { fontSize: 18, color: '#C7C7CC', fontWeight: '300' },
-
-  versionText: {
-    textAlign: 'center',
-    fontSize: 12,
-    color: '#C7C7CC',
-    marginTop: 4,
-  },
-});

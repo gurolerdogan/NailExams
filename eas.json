@@ -11,7 +11,9 @@
         "simulator": false
       },
       "env": {
-        "APP_ENV": "development"
+        "APP_ENV": "development",
+        "GOOGLE_IOS_CLIENT_ID": "948483076530-npmq65i0lqnk6cah7trig8aainjgknmt.apps.googleusercontent.com",
+        "GOOGLE_WEB_CLIENT_ID": "948483076530-rp95umhknv0dpcot8hqjkvngmigl0dlu.apps.googleusercontent.com"
       }
     },
     "preview": {
@@ -20,13 +22,17 @@
         "simulator": false
       },
       "env": {
-        "APP_ENV": "development"
+        "APP_ENV": "development",
+        "GOOGLE_IOS_CLIENT_ID": "948483076530-npmq65i0lqnk6cah7trig8aainjgknmt.apps.googleusercontent.com",
+        "GOOGLE_WEB_CLIENT_ID": "948483076530-rp95umhknv0dpcot8hqjkvngmigl0dlu.apps.googleusercontent.com"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "APP_ENV": "production"
+        "APP_ENV": "production",
+        "GOOGLE_IOS_CLIENT_ID": "948483076530-npmq65i0lqnk6cah7trig8aainjgknmt.apps.googleusercontent.com",
+        "GOOGLE_WEB_CLIENT_ID": "948483076530-rp95umhknv0dpcot8hqjkvngmigl0dlu.apps.googleusercontent.com"
       }
     }
   },

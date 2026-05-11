@@ -11,6 +11,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { loadPlan } from '../services/storage/planStorage';
 import { loadTopics } from '../services/storage/nailexamsStorage';
 import type { WeeklyPlan } from '../types/plan';
@@ -18,6 +19,7 @@ import type { Topic } from '../types/models';
 import type { AppTabParamList } from '../navigation/TabNavigator';
 import EmptyState from '../components/EmptyState';
 import { TILE_PALETTE } from '../constants/palette';
+import type { Theme } from '../themes';
 
 const CONF_BAR_COLORS = ['#E24B4A', '#EF9F27', '#FAC775', '#97C459', '#1D9E75'];
 
@@ -41,12 +43,12 @@ function dayNum(iso: string) {
 function ConfidenceBars({ bars }: { bars: number[] }) {
   const max = Math.max(...bars, 1);
   return (
-    <View style={styles.barsRow}>
+    <View style={staticStyles.barsRow}>
       {bars.map((count, i) => (
         <View
           key={i}
           style={[
-            styles.bar,
+            staticStyles.bar,
             {
               height: Math.max(4, Math.round((Math.max(0.15, count / max)) * 20)),
               backgroundColor: CONF_BAR_COLORS[i],
@@ -59,11 +61,141 @@ function ConfidenceBars({ bars }: { bars: number[] }) {
   );
 }
 
+// Static styles that don't depend on theme (geometry-only)
+const staticStyles = StyleSheet.create({
+  barsRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 24, flex: 1 },
+  bar: { flex: 1, borderRadius: 2 },
+});
+
+function createStyles(theme: Theme) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: theme.colors.screenBg },
+    content: { padding: 16, paddingBottom: 28 },
+
+    appTitle: { fontSize: 32, fontWeight: theme.fonts.headingWeight, color: theme.colors.textPrimary, marginBottom: 12, fontFamily: theme.fonts.heading, letterSpacing: theme.fonts.letterSpacingHeading },
+
+    // Profile card
+    profileCard: {
+      backgroundColor: theme.colors.profileCardBg, borderRadius: theme.radii.card, padding: 16,
+      flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 10,
+    },
+    avatar: {
+      width: 46, height: 46, borderRadius: 23, backgroundColor: '#333',
+      alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    },
+    avatarText: { fontSize: 18, fontWeight: '600', color: theme.colors.profileCardText },
+    profileInfo: { flex: 1, minWidth: 0 },
+    profileEmail: { fontSize: 13, fontWeight: '500', color: theme.colors.profileCardText },
+    profileMeta: { fontSize: 11, color: theme.colors.profileCardMeta, marginTop: 3 },
+    levelBadge: {
+      backgroundColor: theme.colors.profileBadgeBg, borderRadius: theme.radii.input,
+      paddingHorizontal: 10, paddingVertical: 4, flexShrink: 0,
+    },
+    levelBadgeText: { fontSize: 11, fontWeight: '500', color: theme.colors.profileBadgeText },
+
+    // Stats row
+    statsRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+    statCard: { flex: 1, backgroundColor: theme.colors.cardBg, borderRadius: 14, padding: 10 },
+    statVal: { fontSize: 20, fontWeight: '600', color: theme.colors.textPrimary },
+    statLabel: { fontSize: 11, color: theme.colors.textMuted, marginTop: 1 },
+
+    pillSwitcher: {
+      flexDirection: 'row',
+      backgroundColor: theme.colors.pillSwitcherBg,
+      borderRadius: 10,
+      padding: 3,
+      marginBottom: 16,
+    },
+    pill: { flex: 1, paddingVertical: 7, borderRadius: 8, alignItems: 'center' },
+    pillActive: {
+      backgroundColor: theme.colors.pillActiveBg,
+      shadowColor: '#000',
+      shadowOpacity: 0.08,
+      shadowRadius: 4,
+      shadowOffset: { width: 0, height: 1 },
+      elevation: 2,
+    },
+    pillText: { fontSize: 13, fontWeight: '500', color: theme.colors.pillInactiveText },
+    pillTextActive: { color: theme.colors.pillActiveText },
+
+    modeHint: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+      marginBottom: 14,
+      lineHeight: 17,
+    },
+
+    subjectGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+    subjectTile: { width: '47.5%', borderRadius: 16, padding: 12, paddingBottom: 10 },
+    tileName: { fontSize: 13, fontWeight: theme.fonts.bodyWeight, marginBottom: 8, lineHeight: 18, fontFamily: theme.fonts.body },
+    tileFooter: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
+    tileProgress: { fontSize: 11, fontWeight: '600', opacity: 0.6, paddingBottom: 2 },
+
+    weekStrip: { flexDirection: 'row', gap: 5, marginBottom: 12 },
+    dayPill: {
+      flex: 1,
+      backgroundColor: theme.colors.cardBg,
+      borderRadius: 10,
+      paddingVertical: 7,
+      alignItems: 'center',
+      borderWidth: 0.5,
+      borderColor: theme.colors.cardBorder,
+    },
+    dayPillActive: { backgroundColor: theme.colors.buttonPrimaryBg, borderColor: theme.colors.buttonPrimaryBg },
+    dayPillToday: { borderColor: '#185FA5', borderWidth: 1.5 },
+    dayText: { fontSize: 10, fontWeight: '500', color: theme.colors.textSecondary },
+    dayNum: { fontSize: 13, fontWeight: '500', color: theme.colors.textPrimary },
+    dayTextActive: { color: theme.colors.buttonPrimaryText },
+
+    sessionCard: {
+      backgroundColor: theme.colors.cardBg,
+      borderRadius: 14,
+      borderWidth: 0.5,
+      borderColor: theme.colors.cardBorder,
+      padding: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: 8,
+    },
+    sessionIconWrap: {
+      width: 34, height: 34, borderRadius: 10,
+      alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    },
+    sessionIconDot: { width: 10, height: 10, borderRadius: 5 },
+    sessionTitle: { fontSize: 13, fontWeight: theme.fonts.bodyWeight, color: theme.colors.textPrimary, fontFamily: theme.fonts.body },
+    sessionConfRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+    sessionConfDot: { width: 6, height: 6, borderRadius: 3 },
+    sessionConfLabel: { fontSize: 11, fontWeight: '600' },
+    sessionBadgeDone: {
+      backgroundColor: '#DCFCE7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20,
+    },
+    sessionBadgeDoneText: { fontSize: 11, fontWeight: '500', color: '#166534' },
+    sessionStartBtn: {
+      backgroundColor: theme.colors.buttonPrimaryBg, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10,
+    },
+    sessionStartBtnText: { fontSize: 12, fontWeight: '600', color: theme.colors.buttonPrimaryText },
+    emptySmall: { textAlign: 'center', color: theme.colors.textMuted, marginVertical: 12, fontSize: 13 },
+
+    openPlanBtn: {
+      backgroundColor: theme.colors.buttonPrimaryBg,
+      borderRadius: 12,
+      paddingVertical: 12,
+      alignItems: 'center',
+      marginTop: 4,
+    },
+    openPlanBtnText: { color: theme.colors.buttonPrimaryText, fontSize: 13, fontWeight: '500' },
+  });
+}
+
 type HomeMode = 'subjects' | 'plan';
 
 export default function HomeScreen() {
   const tabNav = useNavigation<BottomTabNavigationProp<AppTabParamList>>();
   const { user, profile, subjects, refreshUserData } = useAuth();
+  const { theme } = useTheme();
+
+  const styles = useMemo(() => createStyles(theme), [theme]);
 
   const [mode, setMode] = useState<HomeMode>('subjects');
   const [plan, setPlan] = useState<WeeklyPlan | null>(null);
@@ -339,124 +471,3 @@ export default function HomeScreen() {
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F2F2F7' },
-  content: { padding: 16, paddingBottom: 28 },
-
-  appTitle: { fontSize: 32, fontWeight: '700', color: '#1C1C1E', marginBottom: 12 },
-
-  // Profile card
-  profileCard: {
-    backgroundColor: '#1C1C1E', borderRadius: 18, padding: 16,
-    flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 10,
-  },
-  avatar: {
-    width: 46, height: 46, borderRadius: 23, backgroundColor: '#333',
-    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-  },
-  avatarText: { fontSize: 18, fontWeight: '600', color: '#FFF' },
-  profileInfo: { flex: 1, minWidth: 0 },
-  profileEmail: { fontSize: 13, fontWeight: '500', color: '#FFF' },
-  profileMeta: { fontSize: 11, color: '#AAA', marginTop: 3 },
-  levelBadge: {
-    backgroundColor: '#2C2C2E', borderRadius: 8,
-    paddingHorizontal: 10, paddingVertical: 4, flexShrink: 0,
-  },
-  levelBadgeText: { fontSize: 11, fontWeight: '500', color: '#98D7C2' },
-
-  // Stats row
-  statsRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
-  statCard: { flex: 1, backgroundColor: '#FFF', borderRadius: 14, padding: 10 },
-  statVal: { fontSize: 20, fontWeight: '600', color: '#1C1C1E' },
-  statLabel: { fontSize: 11, color: '#888', marginTop: 1 },
-
-  pillSwitcher: {
-    flexDirection: 'row',
-    backgroundColor: '#E0E0E8',
-    borderRadius: 10,
-    padding: 3,
-    marginBottom: 16,
-  },
-  pill: { flex: 1, paddingVertical: 7, borderRadius: 8, alignItems: 'center' },
-  pillActive: {
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 2,
-  },
-  pillText: { fontSize: 13, fontWeight: '500', color: '#888' },
-  pillTextActive: { color: '#1C1C1E' },
-
-  modeHint: {
-    fontSize: 12,
-    color: '#AAA',
-    marginBottom: 14,
-    lineHeight: 17,
-  },
-
-  subjectGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  subjectTile: { width: '47.5%', borderRadius: 16, padding: 12, paddingBottom: 10 },
-  tileName: { fontSize: 13, fontWeight: '500', marginBottom: 8, lineHeight: 18 },
-  tileFooter: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
-  barsRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 24, flex: 1 },
-  bar: { flex: 1, borderRadius: 2 },
-  tileProgress: { fontSize: 11, fontWeight: '600', opacity: 0.6, paddingBottom: 2 },
-
-  weekStrip: { flexDirection: 'row', gap: 5, marginBottom: 12 },
-  dayPill: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    paddingVertical: 7,
-    alignItems: 'center',
-    borderWidth: 0.5,
-    borderColor: '#DDDDE0',
-  },
-  dayPillActive: { backgroundColor: '#1C1C1E', borderColor: '#1C1C1E' },
-  dayPillToday: { borderColor: '#185FA5', borderWidth: 1.5 },
-  dayText: { fontSize: 10, fontWeight: '500', color: '#888' },
-  dayNum: { fontSize: 13, fontWeight: '500', color: '#1C1C1E' },
-  dayTextActive: { color: '#FFFFFF' },
-
-  sessionCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    borderWidth: 0.5,
-    borderColor: '#E0E0E0',
-    padding: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 8,
-  },
-  sessionIconWrap: {
-    width: 34, height: 34, borderRadius: 10,
-    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-  },
-  sessionIconDot: { width: 10, height: 10, borderRadius: 5 },
-  sessionTitle: { fontSize: 13, fontWeight: '500', color: '#1C1C1E' },
-  sessionConfRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  sessionConfDot: { width: 6, height: 6, borderRadius: 3 },
-  sessionConfLabel: { fontSize: 11, fontWeight: '600' },
-  sessionBadgeDone: {
-    backgroundColor: '#DCFCE7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20,
-  },
-  sessionBadgeDoneText: { fontSize: 11, fontWeight: '500', color: '#166534' },
-  sessionStartBtn: {
-    backgroundColor: '#1C1C1E', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10,
-  },
-  sessionStartBtnText: { fontSize: 12, fontWeight: '600', color: '#FFF' },
-  emptySmall: { textAlign: 'center', color: '#AAA', marginVertical: 12, fontSize: 13 },
-
-  openPlanBtn: {
-    backgroundColor: '#1C1C1E',
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  openPlanBtnText: { color: '#FFFFFF', fontSize: 13, fontWeight: '500' },
-});

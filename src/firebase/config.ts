@@ -24,8 +24,8 @@ type FirebaseExtra = {
 };
 
 function getExtra(): FirebaseExtra {
-  const expoConfig = Constants.expoConfig ?? Constants.manifest2?.extra?.expoClient ?? Constants.manifest;
-  return (expoConfig?.extra ?? {}) as FirebaseExtra;
+  const expoConfig = Constants.expoConfig ?? (Constants.manifest2?.extra?.expoClient as any) ?? Constants.manifest;
+  return ((expoConfig as any)?.extra ?? {}) as FirebaseExtra;
 }
 
 function assertFirebaseConfig(cfg: Required<NonNullable<FirebaseExtra['firebase']>>) {
