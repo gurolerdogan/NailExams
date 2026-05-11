@@ -33,12 +33,12 @@ export default function OnboardingConfirmScreen({ route, navigation }: Props) {
       await saveProfile(profile);
       await saveSubjects(subjects);
       await preloadTopicsForSubjects({ examLevel: profile.examLevel, subjects });
-      await setOnboardingDone(true);
       await refreshUserData();
-      await refreshOnboarding();
-      await logEvent('onboarding_completed', { level: examLevel, subjectsCount: subjects.length });
+      await logEvent('onboarding_subjects_saved', { level: examLevel, subjectsCount: subjects.length });
+      // Onboarding is marked done on the theme screen (final step)
+      navigation.navigate('OnboardingTheme');
     } catch {
-      Alert.alert('Something went wrong', 'Unable to finish onboarding. Please try again.');
+      Alert.alert('Something went wrong', 'Unable to continue. Please try again.');
     } finally {
       setBusy(false);
     }
@@ -56,11 +56,12 @@ export default function OnboardingConfirmScreen({ route, navigation }: Props) {
           </Text>
         </View>
 
-        {/* Step dots */}
+        {/* Step dots — step 3 of 4 */}
         <View style={styles.dots}>
           <View style={styles.dot} />
           <View style={styles.dot} />
           <View style={[styles.dot, styles.dotActive]} />
+          <View style={styles.dot} />
         </View>
 
         {/* Subject tiles (read-only confirmation) */}
@@ -100,7 +101,7 @@ export default function OnboardingConfirmScreen({ route, navigation }: Props) {
           disabled={busy}
         >
           <Text style={styles.finishBtnText}>
-            {busy ? 'Setting up…' : 'Start revising →'}
+            {busy ? 'Setting up…' : 'Next →'}
           </Text>
         </Pressable>
         <Pressable onPress={() => navigation.goBack()} style={styles.backLink}>

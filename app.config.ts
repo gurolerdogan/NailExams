@@ -22,7 +22,7 @@ export default (): ExpoConfig => {
     splash: {
       image: './assets/splash.png',
       resizeMode: 'cover',
-      backgroundColor: '#1C1C1E',
+      backgroundColor: '#0A0A0C',
     },
     ios: {
       bundleIdentifier: 'com.gurolerdogan.nailexams',
@@ -40,7 +40,7 @@ export default (): ExpoConfig => {
       versionCode: 1,
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',
-        backgroundColor: '#1C1C1E',
+        backgroundColor: '#0A0A0C',
       },
       edgeToEdgeEnabled: true,
     },

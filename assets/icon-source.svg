@@ -1,0 +1,22 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="1024" height="1024" fill="#0A0A0C"/>
+  <!-- NE lettermark top-left -->
+  <text x="72" y="168" font-family="Georgia, 'Times New Roman', serif" font-size="96" font-weight="700" fill="#ffffff" opacity="0.9" letter-spacing="-2">NE</text>
+  <!-- hairline separator -->
+  <rect x="72" y="182" width="110" height="3" rx="1.5" fill="#ffffff" opacity="0.15"/>
+  <!-- 5 rising confidence bars (levels 1–5, app palette) -->
+  <rect x="72"  y="648" width="120" height="280" rx="18" fill="#E24B4A"/>
+  <rect x="226" y="530" width="120" height="398" rx="18" fill="#EF9F27"/>
+  <rect x="380" y="400" width="120" height="528" rx="18" fill="#FAC775"/>
+  <rect x="534" y="256" width="120" height="672" rx="18" fill="#97C459"/>
+  <rect x="688" y="96"  width="120" height="832" rx="18" fill="#1D9E75"/>
+  <!-- Level number labels -->
+  <text x="132" y="634"  text-anchor="middle" font-family="Georgia, serif" font-size="52" font-weight="700" fill="#ffffff" opacity="0.7">1</text>
+  <text x="286" y="516"  text-anchor="middle" font-family="Georgia, serif" font-size="52" font-weight="700" fill="#ffffff" opacity="0.7">2</text>
+  <text x="440" y="386"  text-anchor="middle" font-family="Georgia, serif" font-size="52" font-weight="700" fill="#ffffff" opacity="0.7">3</text>
+  <text x="594" y="242"  text-anchor="middle" font-family="Georgia, serif" font-size="52" font-weight="700" fill="#ffffff" opacity="0.7">4</text>
+  <text x="748" y="82"   text-anchor="middle" font-family="Georgia, serif" font-size="52" font-weight="700" fill="#ffffff" opacity="0.7">5</text>
+  <!-- Subtle bottom wordmark -->
+  <text x="512" y="986" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="44" font-weight="400" fill="#ffffff" opacity="0.25" letter-spacing="6">NAILEXAMS</text>
+</svg>
