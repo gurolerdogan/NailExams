@@ -2,12 +2,13 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { getAuth } from 'firebase/auth';
-
 import { useAuth } from '../context/AuthContext';
 import { wipeAll, loadTopics } from '../services/storage/nailexamsStorage';
 import { loadAttempts } from '../services/storage/practiceStorage';
 import { logEvent } from '../services/logging/logEvent';
+import { getAppEnv } from '../firebase/config';
+
+const IS_DEV = getAppEnv() === 'development';
 import type { SettingsStackParamList } from '../navigation/SettingsNavigator';
 
 type Props = NativeStackScreenProps<SettingsStackParamList, 'SettingsHome'>;
@@ -58,7 +59,7 @@ function MenuRow({
 }
 
 export default function SettingsScreen({ navigation }: Props) {
-  const { profile, subjects, logout, refreshOnboarding, refreshUserData } = useAuth();
+  const { user, profile, subjects, logout, refreshOnboarding, refreshUserData } = useAuth();
 
   const [topicCount, setTopicCount]     = useState(0);
   const [checkinCount, setCheckinCount] = useState(0);
@@ -72,11 +73,8 @@ export default function SettingsScreen({ navigation }: Props) {
   useEffect(() => { void loadStats(); }, [loadStats]);
   useFocusEffect(useCallback(() => { void loadStats(); }, [loadStats]));
 
-  // Firebase current user email (falls back gracefully if not available)
-const email = getAuth().currentUser?.email ?? '—';
-
-  // Avatar initial from email
-  const avatarLetter = email !== '—' ? email[0].toUpperCase() : '?';
+  const email        = user?.email ?? '—';
+  const avatarLetter = user?.email ? user.email[0].toUpperCase() : '?';
 
   const onReset = () => {
     Alert.alert(
@@ -179,27 +177,31 @@ const email = getAuth().currentUser?.email ?? '—';
         />
       </View>
 
-      {/* ── Developer section ── */}
-      <Text style={styles.sectionLabel}>Developer</Text>
-      <View style={styles.menuGroup}>
-        <MenuRow
-          icon="🪵"
-          iconBg="#F5F5F5"
-          label="View logs"
-          muted
-          onPress={() => navigation.navigate('Logs')}
-        />
-        <View style={styles.menuDivider} />
-        <MenuRow
-          icon="⚠️"
-          iconBg="#FCEBEB"
-          label="Reset onboarding (wipe data)"
-          destructive
-          muted
-          showChevron={false}
-          onPress={onReset}
-        />
-      </View>
+      {/* ── Developer section — dev builds only ── */}
+      {IS_DEV && (
+        <>
+          <Text style={styles.sectionLabel}>Developer</Text>
+          <View style={styles.menuGroup}>
+            <MenuRow
+              icon="🪵"
+              iconBg="#F5F5F5"
+              label="View logs"
+              muted
+              onPress={() => navigation.navigate('Logs')}
+            />
+            <View style={styles.menuDivider} />
+            <MenuRow
+              icon="⚠️"
+              iconBg="#FCEBEB"
+              label="Reset onboarding (wipe data)"
+              destructive
+              muted
+              showChevron={false}
+              onPress={onReset}
+            />
+          </View>
+        </>
+      )}
 
       <Text style={styles.versionText}>NailExams · v1.0</Text>
     </ScrollView>

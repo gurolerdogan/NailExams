@@ -21,20 +21,9 @@ import { now } from '../utils/time';
 import { logEvent } from '../services/logging/logEvent';
 import type { AppTabParamList } from '../navigation/TabNavigator';
 import EmptyState from '../components/EmptyState';
+import { TILE_PALETTE } from '../constants/palette';
 
 const CONF_COLORS = ['#E24B4A', '#EF9F27', '#FAC775', '#97C459', '#1D9E75'];
-
-// ─── Subject colour palette (must stay in sync with Home + Practice) ──────────
-const TILE_PALETTE = [
-  { bg: '#FAEEDA', icon: '#BA7517' },
-  { bg: '#FBEAF0', icon: '#D4537E' },
-  { bg: '#E6F1FB', icon: '#378ADD' },
-  { bg: '#EEEDFE', icon: '#7F77DD' },
-  { bg: '#EAF3DE', icon: '#639922' },
-  { bg: '#E1F5EE', icon: '#1D9E75' },
-  { bg: '#FEF9C3', icon: '#CA8A04' },
-  { bg: '#F3E8FF', icon: '#7C3AED' },
-];
 
 const MONTH_NAMES = [
   'January','February','March','April','May','June',
@@ -50,14 +39,6 @@ function toISODate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-function startOfWeekMonday(date = new Date()): Date {
-  const d = new Date(date);
-  const dow = d.getDay();
-  const diff = dow === 0 ? -6 : 1 - dow;
-  d.setDate(d.getDate() + diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
 
 function mondayOfWeek(year: number, month: number, day: number): number {
   const date = new Date(year, month, day);
@@ -377,14 +358,6 @@ export default function PlanScreen() {
       <View style={styles.weekSection}>
         <View style={styles.weekSectionHeader}>
           <Text style={styles.weekSectionTitle}>Week of {label}</Text>
-          <View style={styles.weekActions}>
-            <Pressable onPress={onRegenerate} style={styles.weekActionBtn}>
-              <Text style={styles.weekActionText}>Regenerate</Text>
-            </Pressable>
-            <Pressable onPress={onClear} style={styles.weekActionBtn}>
-              <Text style={[styles.weekActionText, { color: '#E24B4A' }]}>Clear</Text>
-            </Pressable>
-          </View>
         </View>
 
         {weekSessions.length === 0 ? (
@@ -407,7 +380,7 @@ export default function PlanScreen() {
               >
                 {/* Subject colour indicator */}
                 <View style={[styles.sessionIconWrap, { backgroundColor: palette.bg }]}>
-                  <View style={[styles.sessionIconDot, { backgroundColor: palette.icon }]} />
+                  <View style={[styles.sessionIconDot, { backgroundColor: palette.text }]} />
                 </View>
 
                 <View style={{ flex: 1 }}>
@@ -449,10 +422,22 @@ export default function PlanScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.screenTitle}>Study Plan</Text>
-      <Text style={styles.screenSub}>
-        {MONTH_NAMES[calMonth]} {calYear}
-        {plan ? ` · ${checkedInCount} of ${totalCount} checked in` : ''}
-      </Text>
+      <View style={styles.screenSubRow}>
+        <Text style={styles.screenSub}>
+          {MONTH_NAMES[calMonth]} {calYear}
+          {plan ? ` · ${checkedInCount} of ${totalCount} checked in` : ''}
+        </Text>
+        {plan && (
+          <View style={styles.headerActions}>
+            <Pressable onPress={onRegenerate} style={styles.headerActionBtn}>
+              <Text style={styles.headerActionText}>Regenerate</Text>
+            </Pressable>
+            <Pressable onPress={onClear} style={styles.headerActionBtn}>
+              <Text style={[styles.headerActionText, { color: '#E24B4A' }]}>Clear</Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
 
       {!plan ? (
         renderEmptyState()
@@ -472,8 +457,16 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F2F2F7' },
   content: { padding: 16, paddingBottom: 32 },
 
-  screenTitle: { fontSize: 22, fontWeight: '600', color: '#1C1C1E', marginBottom: 2 },
-  screenSub: { fontSize: 12, color: '#888', marginBottom: 16 },
+  screenTitle: { fontSize: 22, fontWeight: '600', color: '#1C1C1E', marginBottom: 4 },
+  screenSubRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  screenSub: { flex: 1, fontSize: 12, color: '#888' },
+  headerActions: { flexDirection: 'row', gap: 12 },
+  headerActionBtn: { paddingVertical: 2 },
+  headerActionText: { fontSize: 12, fontWeight: '500', color: '#185FA5' },
 
   // Summary row
   summaryRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
@@ -552,18 +545,13 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   weekSectionHeader: {
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 14,
     borderBottomWidth: 0.5,
     borderBottomColor: '#F0F0F0',
   },
-  weekSectionTitle: { fontSize: 12, fontWeight: '500', color: '#888' },
-  weekActions: { flexDirection: 'row', gap: 12 },
-  weekActionBtn: { padding: 2 },
-  weekActionText: { fontSize: 12, fontWeight: '500', color: '#185FA5' },
+  weekSectionTitle: { fontSize: 16, fontWeight: '600', color: '#1C1C1E', textAlign: 'center' },
 
   emptyWeek: {
     textAlign: 'center',

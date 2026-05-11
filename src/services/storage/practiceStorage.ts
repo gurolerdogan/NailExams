@@ -10,6 +10,10 @@ export async function loadAttempts(): Promise<PracticeAttempt[]> {
 
 export async function appendAttempt(attempt: PracticeAttempt): Promise<void> {
   const current = await loadAttempts();
-  const next = [attempt, ...current].slice(0, MAX_ATTEMPTS);
+  // Append at the end and keep the newest MAX_ATTEMPTS entries.
+  // Avoid prepend+slice(0,N) which reverses the growth direction each time.
+  const next = current.length >= MAX_ATTEMPTS
+    ? [...current.slice(1), attempt]   // drop oldest, add newest
+    : [...current, attempt];
   await setJson(STORAGE_KEYS.attemptsV1, next);
 }

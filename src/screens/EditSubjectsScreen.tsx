@@ -14,33 +14,20 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import type { ExamLevel, Subject } from '../types/models';
 import { saveSubjects } from '../services/storage/nailexamsStorage';
+import { loadPlan } from '../services/storage/planStorage';
 import { uuid } from '../utils/id';
 import { now } from '../utils/time';
 import { logEvent } from '../services/logging/logEvent';
 import { preloadGcseTopicsForSubjects } from '../services/seed/preloadGcseTopics';
 import { GCSE_SUBJECT_PRESETS } from '../data/gcseTopicCatalog';
 import type { SettingsStackParamList } from '../navigation/SettingsNavigator';
+import { TILE_PALETTE } from '../constants/palette';
 
 type Props = NativeStackScreenProps<SettingsStackParamList, 'EditSubjects'>;
 
 const ALEVEL_PRESETS = [
   'Math', 'Further Math', 'Physics', 'Chemistry',
   'Biology', 'Computer Science', 'Economics',
-];
-
-const TILE_PALETTE = [
-  { bg: '#FAEEDA', text: '#633806' },
-  { bg: '#FBEAF0', text: '#72243E' },
-  { bg: '#E6F1FB', text: '#0C447C' },
-  { bg: '#EEEDFE', text: '#3C3489' },
-  { bg: '#EAF3DE', text: '#27500A' },
-  { bg: '#E1F5EE', text: '#085041' },
-  { bg: '#FEF9C3', text: '#854D0E' },
-  { bg: '#F3E8FF', text: '#5B21B6' },
-  { bg: '#FCEBEB', text: '#A32D2D' },
-  { bg: '#E0F2FE', text: '#075985' },
-  { bg: '#F0FDF4', text: '#166534' },
-  { bg: '#FFF7ED', text: '#9A3412' },
 ];
 
 function presetsFor(level: ExamLevel) {
@@ -97,6 +84,26 @@ export default function EditSubjectsScreen({ navigation }: Props) {
       Alert.alert('Select at least 1 subject');
       return;
     }
+
+    // Block removal of any subject that has sessions in the active plan
+    const removedSubjects = subjects.filter((s) => !selected.has(s.name));
+    if (removedSubjects.length > 0) {
+      const plan = await loadPlan();
+      if (plan && plan.sessions.length > 0) {
+        const planSubjectIds = new Set(plan.sessions.map((s) => s.subjectId));
+        const blocked = removedSubjects.filter((s) => planSubjectIds.has(s.id));
+        if (blocked.length > 0) {
+          const names = blocked.map((s) => s.name).join(', ');
+          const plural = blocked.length > 1;
+          Alert.alert(
+            'Clear your plan first',
+            `${names} ${plural ? 'are' : 'is'} included in your active study plan.\n\nGo to the Plan tab and clear it before removing ${plural ? 'these subjects' : 'this subject'}.`,
+          );
+          return;
+        }
+      }
+    }
+
     try {
       setBusy(true);
       const ts = now();

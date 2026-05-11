@@ -34,6 +34,7 @@ export default (): ExpoConfig => {
         foregroundImage: './assets/adaptive-icon.png',
         backgroundColor: '#1C1C1E',
       },
+      edgeToEdgeEnabled: true,
     },
     web: {
       favicon: './assets/favicon.png',

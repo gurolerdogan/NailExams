@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 
 import { getFirebaseAuth } from '../firebase/config';
@@ -18,8 +18,6 @@ type AuthState = {
   onboardingComplete: boolean;
   refreshOnboarding: () => Promise<void>;
 
-  // Profile/subjects are hydrated on login for convenience.
-  // Task 10/11 will make these first-class and editable via onboarding/settings.
   profile: UserProfile | null;
   subjects: Subject[];
 
@@ -36,26 +34,29 @@ export function useAuth(): AuthState {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [initializing, setInitializing] = useState(true);
-
+  const [user, setUser]                       = useState<User | null>(null);
+  const [initializing, setInitializing]       = useState(true);
   const [onboardingComplete, setOnboardingComplete] = useState(false);
+  const [profile, setProfile]                 = useState<UserProfile | null>(null);
+  const [subjects, setSubjects]               = useState<Subject[]>([]);
 
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [subjects, setSubjects] = useState<Subject[]>([]);
-
-  const refreshOnboarding = async () => {
+  // Stable callbacks — no deps means they never change reference, preventing
+  // useEffect re-fires in screens that depend on them via useCallback.
+  const refreshOnboarding = useCallback(async () => {
     const done = await getOnboardingDone();
     setOnboardingComplete(done);
-  };
+  }, []);
 
-  const refreshUserData = async () => {
-    // For Phase 0/1: local-first hydration.
-    // Later: could merge with Firestore/remote.
+  const refreshUserData = useCallback(async () => {
     const [p, s] = await Promise.all([loadProfile(), loadSubjects()]);
     setProfile(p);
     setSubjects(s);
-  };
+  }, []);
+
+  const logout = useCallback(async () => {
+    await firebaseLogout();
+    // onAuthStateChanged will fire and clear local in-memory state
+  }, []);
 
   useEffect(() => {
     const auth = getFirebaseAuth();
@@ -65,13 +66,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(u ?? null);
 
         if (u) {
-          // Ensure storage version/migrations are applied before reading data
           await ensureStorageVersion();
-
-          // Hydrate onboarding + basic user data
           await Promise.all([refreshOnboarding(), refreshUserData()]);
         } else {
-          // Clear local in-memory state when logged out
           setOnboardingComplete(false);
           setProfile(null);
           setSubjects([]);
@@ -82,13 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return unsub;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const logout = async () => {
-    await firebaseLogout();
-    // onAuthStateChanged will fire and clear local in-memory state
-  };
+  }, [refreshOnboarding, refreshUserData]);
 
   const value = useMemo<AuthState>(
     () => ({
@@ -101,7 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       refreshUserData,
       logout,
     }),
-    [user, initializing, onboardingComplete, profile, subjects],
+    [user, initializing, onboardingComplete, refreshOnboarding, profile, subjects, refreshUserData, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

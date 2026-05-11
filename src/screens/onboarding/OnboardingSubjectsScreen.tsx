@@ -13,7 +13,8 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import type { OnboardingStackParamList } from '../../navigation/OnboardingNavigator';
 import type { ExamLevel } from '../../types/models';
-import { GCSE_SUBJECT_PRESETS } from '../../data/gcseTopicCatalog';
+import { GCSE_SUBJECT_PRESETS, ALEVEL_SUBJECT_PRESETS } from '../../data/gcseTopicCatalog';
+import { TILE_PALETTE } from '../../constants/palette';
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, 'OnboardingSubjects'>;
 
@@ -21,23 +22,8 @@ type PresetMap = Record<ExamLevel, string[]>;
 
 const PRESET_SUBJECTS: PresetMap = {
   GCSE: GCSE_SUBJECT_PRESETS,
-  A_LEVEL: ['Math', 'Further Math', 'Physics', 'Chemistry', 'Biology', 'Computer Science', 'Economics'],
+  A_LEVEL: ALEVEL_SUBJECT_PRESETS,
 };
-
-const TILE_PALETTE = [
-  { bg: '#FAEEDA', text: '#633806' },
-  { bg: '#FBEAF0', text: '#72243E' },
-  { bg: '#E6F1FB', text: '#0C447C' },
-  { bg: '#EEEDFE', text: '#3C3489' },
-  { bg: '#EAF3DE', text: '#27500A' },
-  { bg: '#E1F5EE', text: '#085041' },
-  { bg: '#FEF9C3', text: '#854D0E' },
-  { bg: '#F3E8FF', text: '#5B21B6' },
-  { bg: '#FCEBEB', text: '#A32D2D' },
-  { bg: '#E0F2FE', text: '#075985' },
-  { bg: '#F0FDF4', text: '#166534' },
-  { bg: '#FFF7ED', text: '#9A3412' },
-];
 
 export default function OnboardingSubjectsScreen({ navigation, route }: Props) {
   const { examLevel } = route.params;

@@ -10,26 +10,14 @@ import {
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 
-import { getAuth } from 'firebase/auth';
 import { useAuth } from '../context/AuthContext';
 import { loadPlan } from '../services/storage/planStorage';
 import { loadTopics } from '../services/storage/nailexamsStorage';
-import { loadAttempts } from '../services/storage/practiceStorage';
 import type { WeeklyPlan } from '../types/plan';
 import type { Topic } from '../types/models';
 import type { AppTabParamList } from '../navigation/TabNavigator';
 import EmptyState from '../components/EmptyState';
-
-const TILE_PALETTE = [
-  { bg: '#FAEEDA', text: '#633806' },
-  { bg: '#FBEAF0', text: '#72243E' },
-  { bg: '#E6F1FB', text: '#0C447C' },
-  { bg: '#EEEDFE', text: '#3C3489' },
-  { bg: '#EAF3DE', text: '#27500A' },
-  { bg: '#E1F5EE', text: '#085041' },
-  { bg: '#FEF9C3', text: '#854D0E' },
-  { bg: '#F3E8FF', text: '#5B21B6' },
-];
+import { TILE_PALETTE } from '../constants/palette';
 
 const CONF_BAR_COLORS = ['#E24B4A', '#EF9F27', '#FAC775', '#97C459', '#1D9E75'];
 
@@ -40,27 +28,6 @@ function toISODate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-function startOfWeekMonday(date = new Date()): Date {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function weekDates(weekStartIso: string): string[] {
-  const [y, m, d] = weekStartIso.split('-').map(Number);
-  const base = new Date(y, m - 1, d);
-  base.setHours(0, 0, 0, 0);
-  const out: string[] = [];
-  for (let i = 0; i < 7; i++) {
-    const dt = new Date(base);
-    dt.setDate(base.getDate() + i);
-    out.push(toISODate(dt));
-  }
-  return out;
-}
 
 function dayShortLabel(iso: string): string {
   const dt = new Date(iso + 'T00:00:00');
@@ -96,32 +63,26 @@ type HomeMode = 'subjects' | 'plan';
 
 export default function HomeScreen() {
   const tabNav = useNavigation<BottomTabNavigationProp<AppTabParamList>>();
-  const { profile, subjects, refreshUserData } = useAuth();
+  const { user, profile, subjects, refreshUserData } = useAuth();
 
   const [mode, setMode] = useState<HomeMode>('subjects');
   const [plan, setPlan] = useState<WeeklyPlan | null>(null);
   const [allTopics, setAllTopics] = useState<Topic[]>([]);
-  const [checkinCount, setCheckinCount] = useState(0);
   const [selectedDate, setSelectedDate] = useState<string>(toISODate(new Date()));
 
   const load = useCallback(async () => {
     await refreshUserData();
-    const [p, t, attempts] = await Promise.all([loadPlan(), loadTopics(), loadAttempts()]);
+    const [p, t] = await Promise.all([loadPlan(), loadTopics()]);
     setPlan(p);
     setAllTopics(t);
-    setCheckinCount(attempts.length);
-    if (p) {
-      const days = weekDates(p.weekStart);
-      if (!days.includes(selectedDate)) setSelectedDate(days[0]);
-    }
-  }, [refreshUserData, selectedDate]);
+  }, [refreshUserData]);
 
   useEffect(() => { void load(); }, [load]);
   useFocusEffect(useCallback(() => { void load(); }, [load]));
 
-  const email       = getAuth().currentUser?.email ?? '—';
-  const avatarLetter = email !== '—' ? email[0].toUpperCase() : '?';
-  const level       = profile?.examLevel ?? '—';
+  const email        = user?.email ?? '—';
+  const avatarLetter = user?.email ? user.email[0].toUpperCase() : '?';
+  const level        = profile?.examLevel ?? '—';
 
   const subjectStats = useMemo(() => {
     const map = new Map<string, { bars: number[]; checkedIn: number; total: number }>();
@@ -140,10 +101,25 @@ export default function HomeScreen() {
     return map;
   }, [subjects, allTopics]);
 
+  // Sum of unique checked-in topics — same source as the subject tiles so the
+  // stats tile number always matches the sum of the X/Y values shown below.
+  const checkedInTopics = useMemo(() => {
+    let sum = 0;
+    for (const stats of subjectStats.values()) sum += stats.checkedIn;
+    return sum;
+  }, [subjectStats]);
+
+  // Always show a rolling 7-day window starting from today so the strip
+  // stays current regardless of when the plan was generated.
   const planWeekDays = useMemo(() => {
-    if (plan?.weekStart) return weekDates(plan.weekStart);
-    return weekDates(toISODate(startOfWeekMonday()));
-  }, [plan]);
+    const base = new Date();
+    base.setHours(0, 0, 0, 0);
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(base);
+      d.setDate(base.getDate() + i);
+      return toISODate(d);
+    });
+  }, []);
 
   const planHasAny = !!plan && plan.sessions.length > 0;
 
@@ -151,6 +127,18 @@ export default function HomeScreen() {
     if (!planHasAny || !plan) return [];
     return plan.sessions.filter((s) => s.date === selectedDate);
   }, [plan, planHasAny, selectedDate]);
+
+  const subjectPaletteIdx = useMemo(() => {
+    const map = new Map<string, number>();
+    subjects.forEach((s, i) => map.set(s.id, i % TILE_PALETTE.length));
+    return map;
+  }, [subjects]);
+
+  const topicConfidenceMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of allTopics) map.set(t.id, t.confidence ?? 0);
+    return map;
+  }, [allTopics]);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -183,8 +171,8 @@ export default function HomeScreen() {
           <Text style={styles.statLabel}>Topics</Text>
         </View>
         <View style={styles.statCard}>
-          <Text style={[styles.statVal, { color: '#1D9E75' }]}>{checkinCount}</Text>
-          <Text style={styles.statLabel}>Check-ins</Text>
+          <Text style={[styles.statVal, { color: '#1D9E75' }]}>{checkedInTopics}</Text>
+          <Text style={styles.statLabel}>Checked in</Text>
         </View>
       </View>
 
@@ -298,18 +286,45 @@ export default function HomeScreen() {
                   <Text style={styles.emptySmall}>No sessions for this day.</Text>
                 }
                 renderItem={({ item }) => {
-                  const done = item.status === 'DONE';
+                  const done        = item.status === 'DONE';
+                  const paletteIdx  = subjectPaletteIdx.get(item.subjectId) ?? 0;
+                  const palette     = TILE_PALETTE[paletteIdx];
+                  const conf        = topicConfidenceMap.get(item.topicId) ?? 0;
+                  const checkedIn   = conf > 0;
                   return (
-                    <Pressable
-                      style={styles.sessionCard}
-                      onPress={() => tabNav.navigate('Plan')}
-                    >
-                      <Text style={styles.sessionIcon}>{done ? '✅' : '⏳'}</Text>
-                      <Text style={styles.sessionTitle} numberOfLines={2}>{item.title}</Text>
-                      <Text style={[styles.badge, done ? styles.badgeDone : styles.badgePlanned]}>
-                        {done ? 'Done' : 'Planned'}
-                      </Text>
-                    </Pressable>
+                    <View style={styles.sessionCard}>
+                      <View style={[styles.sessionIconWrap, { backgroundColor: palette.bg }]}>
+                        <View style={[styles.sessionIconDot, { backgroundColor: palette.text }]} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.sessionTitle} numberOfLines={2}>{item.title}</Text>
+                        {checkedIn && (
+                          <View style={styles.sessionConfRow}>
+                            <View style={[styles.sessionConfDot, { backgroundColor: CONF_BAR_COLORS[conf - 1] }]} />
+                            <Text style={[styles.sessionConfLabel, { color: CONF_BAR_COLORS[conf - 1] }]}>
+                              {conf}/5
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                      {done ? (
+                        <View style={styles.sessionBadgeDone}>
+                          <Text style={styles.sessionBadgeDoneText}>Done</Text>
+                        </View>
+                      ) : (
+                        <Pressable
+                          style={styles.sessionStartBtn}
+                          onPress={() => tabNav.navigate('Practice', {
+                            subjectId: item.subjectId,
+                            topicId: item.topicId,
+                          })}
+                        >
+                          <Text style={styles.sessionStartBtnText}>
+                            {checkedIn ? 'Mark again' : 'Start →'}
+                          </Text>
+                        </Pressable>
+                      )}
+                    </View>
                   );
                 }}
               />
@@ -417,11 +432,23 @@ const styles = StyleSheet.create({
     gap: 10,
     marginBottom: 8,
   },
-  sessionIcon: { fontSize: 16 },
-  sessionTitle: { flex: 1, fontSize: 13, fontWeight: '500', color: '#1C1C1E' },
-  badge: { fontSize: 10, fontWeight: '600', paddingVertical: 3, paddingHorizontal: 8, borderRadius: 20 },
-  badgeDone: { backgroundColor: '#DCFCE7', color: '#166534' },
-  badgePlanned: { backgroundColor: '#FEF9C3', color: '#854D0E' },
+  sessionIconWrap: {
+    width: 34, height: 34, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  sessionIconDot: { width: 10, height: 10, borderRadius: 5 },
+  sessionTitle: { fontSize: 13, fontWeight: '500', color: '#1C1C1E' },
+  sessionConfRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  sessionConfDot: { width: 6, height: 6, borderRadius: 3 },
+  sessionConfLabel: { fontSize: 11, fontWeight: '600' },
+  sessionBadgeDone: {
+    backgroundColor: '#DCFCE7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20,
+  },
+  sessionBadgeDoneText: { fontSize: 11, fontWeight: '500', color: '#166534' },
+  sessionStartBtn: {
+    backgroundColor: '#1C1C1E', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10,
+  },
+  sessionStartBtnText: { fontSize: 12, fontWeight: '600', color: '#FFF' },
   emptySmall: { textAlign: 'center', color: '#AAA', marginVertical: 12, fontSize: 13 },
 
   openPlanBtn: {

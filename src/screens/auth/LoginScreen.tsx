@@ -35,7 +35,7 @@ export default function LoginScreen({ navigation }: Props) {
     try {
       setBusy(true);
       await signIn(email.trim(), password);
-      await logEvent('login_success', { email: email.trim() });
+      await logEvent('login_success', {});
     } catch (e) {
       Alert.alert('Login failed', mapError(e));
     } finally {
