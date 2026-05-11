@@ -8,6 +8,7 @@ import PracticeScreen from '../screens/PracticeScreen';
 import PlanScreen from '../screens/PlanScreen';
 import SettingsNavigator from './SettingsNavigator';
 import type { SettingsStackParamList } from './SettingsNavigator';
+import { useTheme } from '../context/ThemeContext';
 
 export type AppTabParamList = {
   Home: undefined;
@@ -31,21 +32,24 @@ const TAB_ICONS: Record<
 const Tab = createBottomTabNavigator<AppTabParamList>();
 
 export default function TabNavigator() {
+  const { theme } = useTheme();
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: true,
         tabBarHideOnKeyboard: true,
-        tabBarActiveTintColor: '#1C1C1E',
-        tabBarInactiveTintColor: '#C7C7CC',
+        tabBarActiveTintColor: theme.colors.tabBarActiveTint,
+        tabBarInactiveTintColor: theme.colors.tabBarInactiveTint,
         tabBarStyle: {
-          backgroundColor: '#FFFFFF',
-          borderTopColor: '#F0F0F0',
+          backgroundColor: theme.colors.tabBarBg,
+          borderTopColor: theme.colors.tabBarBorderTop,
           borderTopWidth: 0.5,
         },
         tabBarLabelStyle: {
           fontSize: 10,
-          fontWeight: '500',
+          fontWeight: theme.fonts.bodyWeight,
+          fontFamily: theme.fonts.body,
         },
         tabBarIcon: ({ focused, color, size }) => {
           const icons = TAB_ICONS[route.name as keyof AppTabParamList];

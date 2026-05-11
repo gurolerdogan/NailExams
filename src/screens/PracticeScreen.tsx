@@ -17,6 +17,7 @@ import type { RouteProp } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import type { Subject, Topic } from '../types/models';
 import { loadTopics, saveTopics } from '../services/storage/nailexamsStorage';
 import { appendAttempt, loadAttempts } from '../services/storage/practiceStorage';
@@ -27,6 +28,7 @@ import { logEvent } from '../services/logging/logEvent';
 import type { AppTabParamList } from '../navigation/TabNavigator';
 import EmptyState from '../components/EmptyState';
 import { TILE_PALETTE } from '../constants/palette';
+import type { Theme } from '../themes';
 
 const CONF_BAR_COLORS = ['#E24B4A', '#EF9F27', '#FAC775', '#97C459', '#1D9E75'];
 const CONF_BG         = ['#FCEBEB', '#FAEEDA', '#FEF9C3', '#EAF3DE', '#E1F5EE'];
@@ -40,12 +42,12 @@ type PracticeRoute = RouteProp<AppTabParamList, 'Practice'>;
 function TileBars({ bars }: { bars: number[] }) {
   const max = Math.max(...bars, 1);
   return (
-    <View style={styles.barsRow}>
+    <View style={staticStyles.barsRow}>
       {bars.map((count, i) => (
         <View
           key={i}
           style={[
-            styles.tileBar,
+            staticStyles.tileBar,
             {
               height: Math.max(4, Math.round((count / max) * 20)),
               backgroundColor: CONF_BAR_COLORS[i],
@@ -61,12 +63,12 @@ function TileBars({ bars }: { bars: number[] }) {
 /** Stepped bar row used on topic rows — empty (all grey) when confidence is 0 */
 function TopicBars({ confidence }: { confidence: number }) {
   return (
-    <View style={styles.topicBarsRow}>
+    <View style={staticStyles.topicBarsRow}>
       {[0, 1, 2, 3, 4].map((i) => (
         <View
           key={i}
           style={[
-            styles.topicBar,
+            staticStyles.topicBar,
             { height: 4 + i * 3 },
             confidence > 0 && i < confidence
               ? { backgroundColor: CONF_BAR_COLORS[i] }
@@ -78,11 +80,179 @@ function TopicBars({ confidence }: { confidence: number }) {
   );
 }
 
+// Static geometry-only styles
+const staticStyles = StyleSheet.create({
+  barsRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 24 },
+  tileBar: { flex: 1, borderRadius: 2 },
+  topicBarsRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 2, width: 40 },
+  topicBar: { width: 6, borderRadius: 1 },
+});
+
+function createStyles(theme: Theme) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: theme.colors.screenBg },
+    content: { padding: 16, paddingBottom: 28 },
+
+    screenTitle: {
+      fontSize: 22,
+      fontWeight: theme.fonts.headingWeight,
+      color: theme.colors.textPrimary,
+      marginBottom: 16,
+      lineHeight: 30,
+      fontFamily: theme.fonts.heading,
+      letterSpacing: theme.fonts.letterSpacingHeading,
+    },
+
+    subjectGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+    subjectTile: { width: '47.5%', borderRadius: 16, padding: 12, paddingBottom: 10 },
+    tileName: { fontSize: 13, fontWeight: theme.fonts.bodyWeight, marginBottom: 8, lineHeight: 18, fontFamily: theme.fonts.body },
+
+    topicHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingTop: 12,
+      paddingBottom: 8,
+      backgroundColor: theme.colors.screenBg,
+    },
+    backBtn: { width: 60 },
+    backText: { fontSize: 14, fontWeight: '500', color: '#185FA5' },
+    topicHeaderTitle: {
+      flex: 1,
+      textAlign: 'center',
+      fontSize: 15,
+      fontWeight: '600',
+      color: theme.colors.textPrimary,
+    },
+
+    topicListContent: { paddingHorizontal: 16, paddingBottom: 28 },
+
+    // Subject summary tile
+    subjectSummaryRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+    subjectSummaryCard: { flex: 1, backgroundColor: theme.colors.cardBg, borderRadius: 14, padding: 10 },
+    subjectSummaryVal: { fontSize: 20, fontWeight: '600', color: theme.colors.textPrimary },
+    subjectSummaryValSub: { fontSize: 13, fontWeight: '400', color: theme.colors.textMuted },
+    subjectSummaryLabel: { fontSize: 11, color: theme.colors.textSecondary, marginTop: 1 },
+    progressTrack: { height: 3, backgroundColor: theme.colors.divider, borderRadius: 2, marginTop: 6, overflow: 'hidden' },
+    progressFill: { height: '100%', backgroundColor: '#1D9E75', borderRadius: 2 },
+
+    // Domain groups
+    domainSection: { marginBottom: 8 },
+    domainHeader: {
+      flexDirection: 'row', alignItems: 'center', gap: 6,
+      paddingHorizontal: 4, paddingVertical: 6,
+    },
+    domainTitle: {
+      flex: 1, fontSize: 11, fontWeight: theme.fonts.headingWeight,
+      textTransform: 'uppercase', letterSpacing: 0.6, color: theme.colors.sectionLabel,
+      fontFamily: theme.fonts.body,
+    },
+    domainMeta: { fontSize: 11, color: theme.colors.textMuted },
+    domainChevron: { fontSize: 16, color: theme.colors.textMuted, width: 14, textAlign: 'center' },
+    domainCard: { backgroundColor: theme.colors.cardBg, borderRadius: 14, overflow: 'hidden' },
+
+    topicRow: {
+      flexDirection: 'row', alignItems: 'center',
+      padding: 12, gap: 10,
+      borderBottomWidth: 0.5, borderBottomColor: theme.colors.cardBorder,
+    },
+    topicRowLast: { borderBottomWidth: 0 },
+    topicName: { fontSize: 13, fontWeight: theme.fonts.bodyWeight, color: theme.colors.textPrimary, fontFamily: theme.fonts.body },
+    topicMeta: { fontSize: 11, color: theme.colors.textMuted, marginTop: 2 },
+    topicMetaUnchecked: { color: theme.colors.textMuted, fontStyle: 'italic' },
+    topicNote: { fontSize: 11, color: theme.colors.textMuted, fontStyle: 'italic', marginTop: 1 },
+
+    confPill: {
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 20,
+    },
+    confPillText: { fontSize: 11, fontWeight: '500' },
+    confPillUnchecked: {
+      backgroundColor: theme.colors.divider,
+      borderWidth: 0.5,
+      borderColor: theme.colors.cardBorder,
+    },
+    confPillTextUnchecked: { fontSize: 11, fontWeight: '500', color: theme.colors.textMuted },
+
+    sheetOverlay: {
+      flex: 1,
+      justifyContent: 'flex-end',
+      backgroundColor: 'rgba(0,0,0,0.35)',
+    },
+    sheet: {
+      backgroundColor: theme.colors.cardBg,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      padding: 20,
+      paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+    },
+    sheetHandle: {
+      width: 36,
+      height: 4,
+      backgroundColor: theme.colors.cardBorder,
+      borderRadius: 2,
+      alignSelf: 'center',
+      marginBottom: 16,
+    },
+    sheetTopic: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.colors.textPrimary,
+      marginBottom: 2,
+    },
+    sheetSubject: { fontSize: 12, color: theme.colors.textSecondary, marginBottom: 18 },
+    sheetLabel: { fontSize: 12, color: theme.colors.textSecondary, marginBottom: 8 },
+
+    confSelector: { flexDirection: 'row', gap: 8, marginBottom: 18 },
+    confBtn: {
+      flex: 1,
+      height: 42,
+      borderRadius: theme.radii.input,
+      borderWidth: 1.5,
+      borderColor: theme.colors.cardBorder,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.cardBg,
+    },
+    confBtnText: { fontSize: 15, fontWeight: '600', color: theme.colors.textPrimary },
+
+    noteInput: {
+      borderWidth: 0.5,
+      borderColor: theme.colors.inputBorder,
+      borderRadius: theme.radii.input,
+      padding: 10,
+      fontSize: 13,
+      color: theme.colors.inputText,
+      minHeight: 70,
+      textAlignVertical: 'top',
+      backgroundColor: theme.colors.inputBg,
+      marginBottom: 14,
+    },
+    saveBtn: {
+      backgroundColor: theme.colors.buttonPrimaryBg,
+      borderRadius: 14,
+      paddingVertical: 14,
+      alignItems: 'center',
+    },
+    saveBtnText: { color: theme.colors.buttonPrimaryText, fontSize: 14, fontWeight: '600' },
+    saveHint: {
+      textAlign: 'center',
+      fontSize: 11,
+      color: theme.colors.textMuted,
+      marginTop: 8,
+    },
+  });
+}
+
 // ─── Main screen ──────────────────────────────────────────────────────────────
 export default function PracticeScreen() {
   const { subjects } = useAuth();
+  const { theme } = useTheme();
   const route = useRoute<PracticeRoute>();
   const tabNav = useNavigation<BottomTabNavigationProp<AppTabParamList>>();
+
+  const styles = useMemo(() => createStyles(theme), [theme]);
 
   const subjectIdFromNav = route.params?.subjectId;
   const topicIdFromNav   = route.params?.topicId;
@@ -488,7 +658,7 @@ export default function PracticeScreen() {
             value={note}
             onChangeText={setNote}
             placeholder="What did you struggle with?"
-            placeholderTextColor="#AAA"
+            placeholderTextColor={theme.colors.textMuted}
             style={styles.noteInput}
             multiline
             editable={!busy}
@@ -520,160 +690,3 @@ export default function PracticeScreen() {
     </>
   );
 }
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F2F2F7' },
-  content: { padding: 16, paddingBottom: 28 },
-
-  screenTitle: {
-    fontSize: 22,
-    fontWeight: '600',
-    color: '#1C1C1E',
-    marginBottom: 16,
-    lineHeight: 30,
-  },
-
-  subjectGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  subjectTile: { width: '47.5%', borderRadius: 16, padding: 12, paddingBottom: 10 },
-  tileName: { fontSize: 13, fontWeight: '500', marginBottom: 8, lineHeight: 18 },
-  barsRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 24 },
-  tileBar: { flex: 1, borderRadius: 2 },
-
-  topicHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 8,
-    backgroundColor: '#F2F2F7',
-  },
-  backBtn: { width: 60 },
-  backText: { fontSize: 14, fontWeight: '500', color: '#185FA5' },
-  topicHeaderTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1C1C1E',
-  },
-
-  topicListContent: { paddingHorizontal: 16, paddingBottom: 28 },
-
-  // Subject summary tile
-  subjectSummaryRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
-  subjectSummaryCard: { flex: 1, backgroundColor: '#FFF', borderRadius: 14, padding: 10 },
-  subjectSummaryVal: { fontSize: 20, fontWeight: '600', color: '#1C1C1E' },
-  subjectSummaryValSub: { fontSize: 13, fontWeight: '400', color: '#AAA' },
-  subjectSummaryLabel: { fontSize: 11, color: '#888', marginTop: 1 },
-  progressTrack: { height: 3, backgroundColor: '#F0F0F0', borderRadius: 2, marginTop: 6, overflow: 'hidden' },
-  progressFill: { height: '100%', backgroundColor: '#1D9E75', borderRadius: 2 },
-
-  // Domain groups
-  domainSection: { marginBottom: 8 },
-  domainHeader: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 4, paddingVertical: 6,
-  },
-  domainTitle: {
-    flex: 1, fontSize: 11, fontWeight: '700',
-    textTransform: 'uppercase', letterSpacing: 0.6, color: '#888',
-  },
-  domainMeta: { fontSize: 11, color: '#AAA' },
-  domainChevron: { fontSize: 16, color: '#AAA', width: 14, textAlign: 'center' },
-  domainCard: { backgroundColor: '#FFF', borderRadius: 14, overflow: 'hidden' },
-
-  topicRow: {
-    flexDirection: 'row', alignItems: 'center',
-    padding: 12, gap: 10,
-    borderBottomWidth: 0.5, borderBottomColor: '#EBEBEB',
-  },
-  topicRowLast: { borderBottomWidth: 0 },
-  topicName: { fontSize: 13, fontWeight: '500', color: '#1C1C1E' },
-  topicMeta: { fontSize: 11, color: '#AAA', marginTop: 2 },
-  topicMetaUnchecked: { color: '#C0C0C0', fontStyle: 'italic' },
-  topicNote: { fontSize: 11, color: '#AAA', fontStyle: 'italic', marginTop: 1 },
-  topicBarsRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 2, width: 40 },
-  topicBar: { width: 6, borderRadius: 1 },
-
-  confPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 20,
-  },
-  confPillText: { fontSize: 11, fontWeight: '500' },
-  confPillUnchecked: {
-    backgroundColor: '#F0F0F0',
-    borderWidth: 0.5,
-    borderColor: '#DDD',
-  },
-  confPillTextUnchecked: { fontSize: 11, fontWeight: '500', color: '#BBB' },
-
-  sheetOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  sheet: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 20,
-    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
-  },
-  sheetHandle: {
-    width: 36,
-    height: 4,
-    backgroundColor: '#DDD',
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: 16,
-  },
-  sheetTopic: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1C1C1E',
-    marginBottom: 2,
-  },
-  sheetSubject: { fontSize: 12, color: '#888', marginBottom: 18 },
-  sheetLabel: { fontSize: 12, color: '#888', marginBottom: 8 },
-
-  confSelector: { flexDirection: 'row', gap: 8, marginBottom: 18 },
-  confBtn: {
-    flex: 1,
-    height: 42,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: '#E0E0E0',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFF',
-  },
-  confBtnText: { fontSize: 15, fontWeight: '600', color: '#1C1C1E' },
-
-  noteInput: {
-    borderWidth: 0.5,
-    borderColor: '#E0E0E0',
-    borderRadius: 10,
-    padding: 10,
-    fontSize: 13,
-    color: '#1C1C1E',
-    minHeight: 70,
-    textAlignVertical: 'top',
-    backgroundColor: '#F9F9F9',
-    marginBottom: 14,
-  },
-  saveBtn: {
-    backgroundColor: '#1C1C1E',
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  saveBtnText: { color: '#FFF', fontSize: 14, fontWeight: '600' },
-  saveHint: {
-    textAlign: 'center',
-    fontSize: 11,
-    color: '#AAA',
-    marginTop: 8,
-  },
-});

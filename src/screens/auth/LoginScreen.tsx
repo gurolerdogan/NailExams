@@ -11,19 +11,24 @@ import {
   View,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import { Ionicons } from '@expo/vector-icons';
 
-import { signIn } from '../../services/auth/authService';
+import { signIn, signInWithGoogle, signInWithApple } from '../../services/auth/authService';
 import { useFirebaseError } from '../../hooks/useFirebaseError';
 import type { AuthStackParamList } from '../../navigation/AuthNavigator';
 import { logEvent } from '../../services/logging/logEvent';
+import { SOCIAL_AUTH_ENABLED } from '../../../App';
+import { useTheme } from '../../context/ThemeContext';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
 export default function LoginScreen({ navigation }: Props) {
   const mapError = useFirebaseError();
-  const [email, setEmail] = useState('');
+  const { theme } = useTheme();
+  const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy]         = useState(false);
 
   const canSubmit = useMemo(
     () => email.trim().length > 3 && password.length >= 6 && !busy,
@@ -43,67 +48,104 @@ export default function LoginScreen({ navigation }: Props) {
     }
   };
 
+  const onGoogleSignIn = async () => {
+    try {
+      setBusy(true);
+      await signInWithGoogle();
+      await logEvent('google_login_success', {});
+    } catch (e: any) {
+      if (e.code !== 'SIGN_IN_CANCELLED') {
+        Alert.alert('Google sign-in failed', `${e.code ?? ''}: ${e.message ?? mapError(e)}`);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onAppleSignIn = async () => {
+    try {
+      setBusy(true);
+      await signInWithApple();
+      await logEvent('apple_login_success', {});
+    } catch (e: any) {
+      if (e.code !== 'ERR_REQUEST_CANCELED') {
+        Alert.alert('Apple sign-in failed', mapError(e));
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const T = theme.colors;
+  const R = theme.radii;
+
   return (
-    <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView
-        style={styles.kav}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
+    <SafeAreaView style={{ flex: 1, backgroundColor: T.screenBg }}>
+      <KeyboardAvoidingView style={styles.kav} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.container}>
 
-          {/* Wordmark */}
           <View style={styles.hero}>
-            <Text style={styles.wordmark}>NailExams</Text>
-            <Text style={styles.tagline}>Revise smarter, not harder.</Text>
+            <Text style={{ fontSize: 32, fontWeight: '800', color: T.accent, letterSpacing: theme.fonts.letterSpacingHeading, fontFamily: theme.fonts.heading }}>NailExams</Text>
+            <Text style={{ fontSize: 14, color: T.textMuted, marginTop: 4 }}>Revise smarter, not harder.</Text>
           </View>
 
-          {/* Form */}
           <View style={styles.form}>
             <View style={styles.field}>
-              <Text style={styles.fieldLabel}>EMAIL</Text>
+              <Text style={{ fontSize: 11, fontWeight: '600', color: T.textMuted, letterSpacing: 0.6, marginBottom: 6 }}>EMAIL</Text>
               <TextInput
-                style={styles.input}
-                value={email}
-                onChangeText={setEmail}
-                placeholder="name@example.com"
-                placeholderTextColor="#BBBBBB"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!busy}
+                style={{ backgroundColor: T.inputBg, borderRadius: R.input, paddingHorizontal: 16, paddingVertical: 14, fontSize: 15, color: T.inputText, borderWidth: 1, borderColor: T.inputBorder }}
+                value={email} onChangeText={setEmail}
+                placeholder="name@example.com" placeholderTextColor={T.textMuted}
+                keyboardType="email-address" autoCapitalize="none" autoCorrect={false} editable={!busy}
               />
             </View>
 
             <View style={styles.field}>
-              <Text style={styles.fieldLabel}>PASSWORD</Text>
+              <Text style={{ fontSize: 11, fontWeight: '600', color: T.textMuted, letterSpacing: 0.6, marginBottom: 6 }}>PASSWORD</Text>
               <TextInput
-                style={styles.input}
-                value={password}
-                onChangeText={setPassword}
-                placeholder="••••••••"
-                placeholderTextColor="#BBBBBB"
-                secureTextEntry
-                autoCapitalize="none"
-                editable={!busy}
+                style={{ backgroundColor: T.inputBg, borderRadius: R.input, paddingHorizontal: 16, paddingVertical: 14, fontSize: 15, color: T.inputText, borderWidth: 1, borderColor: T.inputBorder }}
+                value={password} onChangeText={setPassword}
+                placeholder="••••••••" placeholderTextColor={T.textMuted}
+                secureTextEntry autoCapitalize="none" editable={!busy}
               />
             </View>
 
             <Pressable
-              style={[styles.signInBtn, !canSubmit && { opacity: 0.45 }]}
-              onPress={onLogin}
-              disabled={!canSubmit}
+              style={[{ backgroundColor: T.buttonPrimaryBg, borderRadius: R.button, paddingVertical: 16, alignItems: 'center', marginTop: 6, marginBottom: 20 }, !canSubmit && { opacity: 0.45 }]}
+              onPress={onLogin} disabled={!canSubmit}
             >
-              <Text style={styles.signInBtnText}>
-                {busy ? 'Signing in…' : 'Sign in'}
-              </Text>
+              <Text style={{ color: T.buttonPrimaryText, fontSize: 15, fontWeight: '600', fontFamily: theme.fonts.body }}>{busy ? 'Signing in…' : 'Sign in'}</Text>
             </Pressable>
+
+            {SOCIAL_AUTH_ENABLED && (
+              <>
+                <View style={styles.dividerRow}>
+                  <View style={[styles.dividerLine, { backgroundColor: T.divider }]} />
+                  <Text style={{ fontSize: 12, color: T.textMuted, marginHorizontal: 10 }}>or continue with</Text>
+                  <View style={[styles.dividerLine, { backgroundColor: T.divider }]} />
+                </View>
+                <View style={styles.socialRow}>
+                  <Pressable style={[styles.socialBtn, { backgroundColor: T.cardBg, borderColor: T.cardBorder, borderRadius: R.input }, busy && { opacity: 0.45 }]} onPress={onGoogleSignIn} disabled={busy}>
+                    <Ionicons name="logo-google" size={18} color={T.textPrimary} />
+                    <Text style={{ fontSize: 14, fontWeight: '500', color: T.textPrimary }}>Google</Text>
+                  </Pressable>
+                  {Platform.OS === 'ios' && (
+                    <AppleAuthentication.AppleAuthenticationButton
+                      buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                      buttonStyle={theme.dark ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                      cornerRadius={R.input} style={styles.appleBtn} onPress={onAppleSignIn}
+                    />
+                  )}
+                </View>
+              </>
+            )}
 
             <View style={styles.links}>
               <Pressable onPress={() => !busy && navigation.navigate('ForgotPassword')}>
-                <Text style={styles.link}>Forgot password?</Text>
+                <Text style={{ fontSize: 13, color: T.textMuted }}>Forgot password?</Text>
               </Pressable>
               <Pressable onPress={() => !busy && navigation.navigate('SignUp')}>
-                <Text style={[styles.link, styles.linkPrimary]}>Create account →</Text>
+                <Text style={{ fontSize: 13, color: T.accent, fontWeight: '500' }}>Create account →</Text>
               </Pressable>
             </View>
           </View>
@@ -114,50 +156,20 @@ export default function LoginScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#FFFFFF' },
+// Static layout — only structural, no color tokens
+const staticStyles = StyleSheet.create({
   kav: { flex: 1 },
   container: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
-
   hero: { marginBottom: 36 },
-  wordmark: { fontSize: 32, fontWeight: '800', color: '#1C1C1E', letterSpacing: -0.5 },
-  tagline: { fontSize: 14, color: '#888', marginTop: 4 },
-
   form: { gap: 0 },
   field: { marginBottom: 14 },
-  fieldLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#AAA',
-    letterSpacing: 0.6,
-    marginBottom: 6,
-  },
-  input: {
-    backgroundColor: '#F5F5F5',
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 15,
-    color: '#1C1C1E',
-    borderWidth: 1,
-    borderColor: '#EBEBEB',
-  },
-
-  signInBtn: {
-    backgroundColor: '#1C1C1E',
-    borderRadius: 16,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 6,
-    marginBottom: 20,
-  },
-  signInBtnText: { color: '#FFF', fontSize: 15, fontWeight: '600' },
-
-  links: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  link: { fontSize: 13, color: '#888' },
-  linkPrimary: { color: '#185FA5', fontWeight: '500' },
+  dividerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  dividerLine: { flex: 1, height: 0.5 },
+  socialRow: { flexDirection: 'row', gap: 10, marginBottom: 24 },
+  socialBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderWidth: 1 },
+  appleBtn: { flex: 1, height: 50 },
+  links: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
 });
+
+// Alias so JSX doesn't change
+const styles = staticStyles;

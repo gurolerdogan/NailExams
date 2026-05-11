@@ -13,6 +13,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import type { Topic } from '../types/models';
 import type { WeeklyPlan } from '../types/plan';
 import { loadPlan, savePlan, clearPlan } from '../services/storage/planStorage';
@@ -22,6 +23,7 @@ import { logEvent } from '../services/logging/logEvent';
 import type { AppTabParamList } from '../navigation/TabNavigator';
 import EmptyState from '../components/EmptyState';
 import { TILE_PALETTE } from '../constants/palette';
+import type { Theme } from '../themes';
 
 const CONF_COLORS = ['#E24B4A', '#EF9F27', '#FAC775', '#97C459', '#1D9E75'];
 
@@ -77,10 +79,163 @@ function computeStreak(sessions: WeeklyPlan['sessions']): number {
   return streak;
 }
 
+function createStyles(theme: Theme) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: theme.colors.screenBg },
+    content: { padding: 16, paddingBottom: 32 },
+
+    screenTitle: { fontSize: 22, fontWeight: theme.fonts.headingWeight, color: theme.colors.textPrimary, marginBottom: 4, fontFamily: theme.fonts.heading, letterSpacing: theme.fonts.letterSpacingHeading },
+    screenSubRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 16,
+    },
+    screenSub: { flex: 1, fontSize: 12, color: theme.colors.textSecondary },
+    headerActions: { flexDirection: 'row', gap: 12 },
+    headerActionBtn: { paddingVertical: 2 },
+    headerActionText: { fontSize: 12, fontWeight: '500', color: '#185FA5' },
+
+    // Summary row
+    summaryRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+    summaryCard: {
+      flex: 1,
+      backgroundColor: theme.colors.cardBg,
+      borderRadius: 14,
+      padding: 10,
+    },
+    summaryVal: { fontSize: 20, fontWeight: '600', color: theme.colors.textPrimary },
+    summaryValSub: { fontSize: 13, fontWeight: '400', color: theme.colors.textMuted },
+    summaryLabel: { fontSize: 11, color: theme.colors.textSecondary, marginTop: 1 },
+    progressTrack: {
+      height: 3,
+      backgroundColor: theme.colors.divider,
+      borderRadius: 2,
+      marginTop: 6,
+      overflow: 'hidden',
+    },
+    progressFill: { height: '100%', backgroundColor: '#1D9E75', borderRadius: 2 },
+
+    // Calendar
+    calendarCard: {
+      backgroundColor: theme.colors.cardBg,
+      borderRadius: 16,
+      padding: 14,
+      marginBottom: 12,
+    },
+    monthHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 10,
+    },
+    monthNavBtn: { padding: 4 },
+    monthNavText: { fontSize: 20, color: '#185FA5', fontWeight: '400' },
+    monthLabel: { fontSize: 14, fontWeight: '600', color: theme.colors.textPrimary },
+
+    calGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+    },
+    dayHeader: {
+      width: '14.28%',
+      textAlign: 'center',
+      fontSize: 10,
+      fontWeight: '500',
+      color: theme.colors.textMuted,
+      paddingBottom: 6,
+    },
+    dayCell: {
+      width: '14.28%',
+      aspectRatio: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 8,
+    },
+    dayCellToday: { backgroundColor: theme.colors.buttonPrimaryBg },
+    dayCellSelected: { backgroundColor: '#E6F1FB' },
+    dayCellText: { fontSize: 11, fontWeight: '500', color: theme.colors.textPrimary },
+    dayCellTextToday: { color: theme.colors.buttonPrimaryText },
+    dayCellTextSelected: { color: '#185FA5' },
+    dotRow: { flexDirection: 'row', gap: 2, marginTop: 1 },
+    dot: {
+      width: 4,
+      height: 4,
+      borderRadius: 2,
+      borderWidth: 1,
+      backgroundColor: 'transparent',
+    },
+
+    // Week sessions
+    weekSection: {
+      backgroundColor: theme.colors.cardBg,
+      borderRadius: 16,
+      overflow: 'hidden',
+    },
+    weekSectionHeader: {
+      alignItems: 'center',
+      paddingHorizontal: 14,
+      paddingVertical: 14,
+      borderBottomWidth: 0.5,
+      borderBottomColor: theme.colors.divider,
+    },
+    weekSectionTitle: { fontSize: 16, fontWeight: theme.fonts.headingWeight, color: theme.colors.textPrimary, textAlign: 'center', fontFamily: theme.fonts.heading },
+
+    emptyWeek: {
+      textAlign: 'center',
+      color: theme.colors.textMuted,
+      fontSize: 13,
+      padding: 20,
+    },
+
+    sessionCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      gap: 12,
+      borderBottomWidth: 0.5,
+      borderBottomColor: theme.colors.divider,
+    },
+    sessionIconWrap: {
+      width: 34,
+      height: 34,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+    },
+    sessionIconDot: { width: 10, height: 10, borderRadius: 5 },
+    sessionTitle: { fontSize: 13, fontWeight: theme.fonts.bodyWeight, color: theme.colors.textPrimary, fontFamily: theme.fonts.body },
+    sessionMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
+    sessionMeta: { fontSize: 11, color: theme.colors.textMuted },
+    confDot: { width: 6, height: 6, borderRadius: 3 },
+    confLabel: { fontSize: 11, fontWeight: '600' },
+
+    badgeDone: {
+      backgroundColor: '#DCFCE7',
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 20,
+    },
+    badgeDoneText: { fontSize: 11, fontWeight: '500', color: '#166534' },
+
+    startBtn: {
+      backgroundColor: theme.colors.buttonPrimaryBg,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 10,
+    },
+    startBtnText: { fontSize: 12, fontWeight: '600', color: theme.colors.buttonPrimaryText },
+  });
+}
+
 // ─── Main screen ──────────────────────────────────────────────────────────────
 export default function PlanScreen() {
   const { subjects } = useAuth();
+  const { theme } = useTheme();
   const tabNav = useNavigation<BottomTabNavigationProp<AppTabParamList>>();
+
+  const styles = useMemo(() => createStyles(theme), [theme]);
 
   const [plan, setPlan]       = useState<WeeklyPlan | null>(null);
   const [topics, setTopics]   = useState<Topic[]>([]);
@@ -451,152 +606,3 @@ export default function PlanScreen() {
     </ScrollView>
   );
 }
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F2F2F7' },
-  content: { padding: 16, paddingBottom: 32 },
-
-  screenTitle: { fontSize: 22, fontWeight: '600', color: '#1C1C1E', marginBottom: 4 },
-  screenSubRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  screenSub: { flex: 1, fontSize: 12, color: '#888' },
-  headerActions: { flexDirection: 'row', gap: 12 },
-  headerActionBtn: { paddingVertical: 2 },
-  headerActionText: { fontSize: 12, fontWeight: '500', color: '#185FA5' },
-
-  // Summary row
-  summaryRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  summaryCard: {
-    flex: 1,
-    backgroundColor: '#FFF',
-    borderRadius: 14,
-    padding: 10,
-  },
-  summaryVal: { fontSize: 20, fontWeight: '600', color: '#1C1C1E' },
-  summaryValSub: { fontSize: 13, fontWeight: '400', color: '#AAA' },
-  summaryLabel: { fontSize: 11, color: '#888', marginTop: 1 },
-  progressTrack: {
-    height: 3,
-    backgroundColor: '#F0F0F0',
-    borderRadius: 2,
-    marginTop: 6,
-    overflow: 'hidden',
-  },
-  progressFill: { height: '100%', backgroundColor: '#1D9E75', borderRadius: 2 },
-
-  // Calendar
-  calendarCard: {
-    backgroundColor: '#FFF',
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 12,
-  },
-  monthHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  monthNavBtn: { padding: 4 },
-  monthNavText: { fontSize: 20, color: '#185FA5', fontWeight: '400' },
-  monthLabel: { fontSize: 14, fontWeight: '600', color: '#1C1C1E' },
-
-  calGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  dayHeader: {
-    width: '14.28%',
-    textAlign: 'center',
-    fontSize: 10,
-    fontWeight: '500',
-    color: '#AAA',
-    paddingBottom: 6,
-  },
-  dayCell: {
-    width: '14.28%',
-    aspectRatio: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 8,
-  },
-  dayCellToday: { backgroundColor: '#1C1C1E' },
-  dayCellSelected: { backgroundColor: '#E6F1FB' },
-  dayCellText: { fontSize: 11, fontWeight: '500', color: '#1C1C1E' },
-  dayCellTextToday: { color: '#FFF' },
-  dayCellTextSelected: { color: '#185FA5' },
-  dotRow: { flexDirection: 'row', gap: 2, marginTop: 1 },
-  dot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    borderWidth: 1,
-    backgroundColor: 'transparent',
-  },
-
-  // Week sessions
-  weekSection: {
-    backgroundColor: '#FFF',
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  weekSectionHeader: {
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#F0F0F0',
-  },
-  weekSectionTitle: { fontSize: 16, fontWeight: '600', color: '#1C1C1E', textAlign: 'center' },
-
-  emptyWeek: {
-    textAlign: 'center',
-    color: '#AAA',
-    fontSize: 13,
-    padding: 20,
-  },
-
-  sessionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 12,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#F5F5F5',
-  },
-  sessionIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  sessionIconDot: { width: 10, height: 10, borderRadius: 5 },
-  sessionTitle: { fontSize: 13, fontWeight: '500', color: '#1C1C1E' },
-  sessionMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
-  sessionMeta: { fontSize: 11, color: '#AAA' },
-  confDot: { width: 6, height: 6, borderRadius: 3 },
-  confLabel: { fontSize: 11, fontWeight: '600' },
-
-  badgeDone: {
-    backgroundColor: '#DCFCE7',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
-  badgeDoneText: { fontSize: 11, fontWeight: '500', color: '#166534' },
-
-  startBtn: {
-    backgroundColor: '#1C1C1E',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-  },
-  startBtnText: { fontSize: 12, fontWeight: '600', color: '#FFF' },
-});
