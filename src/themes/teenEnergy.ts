@@ -6,6 +6,9 @@ export const teenEnergyTheme: Theme = {
   description: 'Dark · neon · high contrast',
   dark: true,
   previewSwatches: ['#0D0D0F', '#16161A', '#C8FF00', '#FF3CAC'],
+  subjectPanel: 'list'    as const,
+  progressChart: 'progressline' as const,
+  checkedIn: 'Percent' as const,
   colors: {
     screenBg: '#0D0D0F',
     cardBg: '#16161A',

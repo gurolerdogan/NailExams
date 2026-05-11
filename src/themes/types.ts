@@ -67,6 +67,17 @@ export type ThemeRadii = {
   pill: number;
 };
 
+// ─── Subject panel display options ───────────────────────────────────────────
+
+/** How subjects are arranged on the Home screen */
+export type SubjectPanelType = 'tile' | 'list';
+
+/** How subject progress (confidence distribution) is visualised */
+export type ProgressChartType = 'barchart' | 'progressline' | 'colordots';
+
+/** How the checked-in count is displayed */
+export type CheckedInType = 'CtoT' | 'Percent';
+
 export type Theme = {
   id: string;
   name: string;
@@ -77,4 +88,8 @@ export type Theme = {
   radii: ThemeRadii;
   // Preview swatches shown in the Theme Selector
   previewSwatches: string[];
+  // Home screen subject display
+  subjectPanel: SubjectPanelType;
+  progressChart: ProgressChartType;
+  checkedIn: CheckedInType;
 };

@@ -9,6 +9,9 @@ export const darkTerminalTheme: Theme = {
   description: 'Deep navy · monospace',
   dark: true,
   previewSwatches: ['#080E1A', '#0C1526', '#4AFFB4', '#4AB8FF'],
+  subjectPanel: 'list'    as const,
+  progressChart: 'colordots'   as const,
+  checkedIn: 'Percent' as const,
   colors: {
     screenBg: '#080E1A',
     cardBg: '#0C1526',

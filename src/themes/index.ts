@@ -1,4 +1,4 @@
-export type { Theme, ThemeColors, ThemeFonts, ThemeRadii } from './types';
+export type { Theme, ThemeColors, ThemeFonts, ThemeRadii, SubjectPanelType, ProgressChartType, CheckedInType } from './types';
 export { defaultTheme } from './default';
 export { teenEnergyTheme } from './teenEnergy';
 export { softFocusTheme } from './softFocus';
