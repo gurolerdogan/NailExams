@@ -9,6 +9,9 @@ export default (): ExpoConfig => {
     slug: 'nailexams',
     scheme: 'nailexams',
     version: '1.0.0',
+    // App Store support & privacy URLs (GitHub Pages)
+    // Enable: Repo Settings → Pages → Deploy from branch → main / docs
+    // URL: https://gurolerdogan.github.io/NailExams/
     orientation: 'portrait',
     icon: './assets/icon.png',
     userInterfaceStyle: 'light',
