@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NailExams — Support</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0A0A0C;
+      --surface:  #16161A;
+      --border:   #2A2A30;
+      --text:     #E8E8EC;
+      --muted:    #888;
+      --accent:   #1D9E75;
+      --red:      #E24B4A;
+      --orange:   #EF9F27;
+      --yellow:   #FAC775;
+      --green-lt: #97C459;
+      --green:    #1D9E75;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Layout ── */
+    .wrap { max-width: 680px; margin: 0 auto; padding: 0 20px; }
+
+    /* ── Header ── */
+    header {
+      padding: 48px 0 40px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 48px;
+    }
+    .logo-row { display: flex; align-items: center; gap: 16px; margin-bottom: 12px; }
+    .bars {
+      display: flex; align-items: flex-end; gap: 4px; height: 36px;
+    }
+    .bar { width: 10px; border-radius: 3px; }
+    h1 { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; }
+    .tagline { color: var(--muted); font-size: 15px; margin-top: 4px; }
+
+    /* ── Sections ── */
+    section { margin-bottom: 52px; }
+    h2 {
+      font-size: 13px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 1px; color: var(--muted);
+      margin-bottom: 20px; padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+    p { color: #B0B0BA; margin-bottom: 12px; }
+
+    /* ── FAQ ── */
+    .faq { display: flex; flex-direction: column; gap: 24px; }
+    .faq-item { background: var(--surface); border-radius: 12px; padding: 20px 22px; border: 1px solid var(--border); }
+
+    /* ── Contact card ── */
+    .contact-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px;
+      margin-bottom: 16px;
+    }
+    .contact-card p { margin-bottom: 0; }
+    .contact-card a { font-weight: 600; }
+
+    /* ── Privacy ── */
+    .privacy-block { background: var(--surface); border-radius: 14px; padding: 24px; border: 1px solid var(--border); }
+    .privacy-block h3 { margin-bottom: 10px; }
+    .privacy-block ul { color: #B0B0BA; padding-left: 20px; }
+    .privacy-block ul li { margin-bottom: 8px; }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 28px 0;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+
+    <header>
+      <div class="logo-row">
+        <div class="bars">
+          <div class="bar" style="height:12px;background:#E24B4A;"></div>
+          <div class="bar" style="height:18px;background:#EF9F27;"></div>
+          <div class="bar" style="height:24px;background:#FAC775;"></div>
+          <div class="bar" style="height:30px;background:#97C459;"></div>
+          <div class="bar" style="height:36px;background:#1D9E75;"></div>
+        </div>
+        <h1>NailExams</h1>
+      </div>
+      <p class="tagline">Track topic confidence · Plan your revision · Nail your exams.</p>
+    </header>
+
+    <!-- Support -->
+    <section id="support">
+      <h2>Get Support</h2>
+
+      <div class="contact-card">
+        <h3>Report a bug or ask a question</h3>
+        <p>
+          Open an issue on GitHub and we'll get back to you as soon as possible.<br>
+          <a href="https://github.com/gurolerdogan/NailExams/issues/new" target="_blank">
+            → Open a support request on GitHub
+          </a>
+        </p>
+      </div>
+
+      <div class="contact-card">
+        <h3>Browse existing issues</h3>
+        <p>
+          Someone may have already reported the same problem or asked the same question.<br>
+          <a href="https://github.com/gurolerdogan/NailExams/issues" target="_blank">
+            → View all issues
+          </a>
+        </p>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section id="faq">
+      <h2>Frequently Asked Questions</h2>
+      <div class="faq">
+
+        <div class="faq-item">
+          <h3>What does NailExams actually do?</h3>
+          <p>NailExams is a revision confidence tracker — not a flashcard or notes app. After each study session, you mark how confident you feel (1–5) for each topic. The app shows you exactly which topics need more work and lets you build a structured revision plan.</p>
+        </div>
+
+        <div class="faq-item">
+          <h3>Does NailExams store my data online?</h3>
+          <p>Your revision data (subjects, topics, confidence levels, and study plan) is stored <strong>locally on your device only</strong>. Only your login account is managed via Firebase Authentication. No revision data ever leaves your device.</p>
+        </div>
+
+        <div class="faq-item">
+          <h3>Which exams does NailExams support?</h3>
+          <p>NailExams includes pre-loaded topic lists for GCSE and A-Level subjects. You can also add custom subjects and topics for any exam board or qualification.</p>
+        </div>
+
+        <div class="faq-item">
+          <h3>What happens if I delete the app?</h3>
+          <p>Because all revision data is stored locally, deleting the app will remove your topics, confidence levels, and study plan. Your login account remains active and you can sign back in, but you will need to set up your subjects again.</p>
+        </div>
+
+        <div class="faq-item">
+          <h3>How do I reset my password?</h3>
+          <p>On the login screen, tap <strong>"Forgot password?"</strong> and enter your email address. You'll receive a reset link from Firebase Authentication.</p>
+        </div>
+
+        <div class="faq-item">
+          <h3>Why isn't my study plan showing today's sessions?</h3>
+          <p>Study plans are date-based. Make sure your plan was generated or updated recently — plans older than their duration window won't show current-day sessions. Go to <strong>Settings → Plan Settings</strong> to regenerate.</p>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Privacy Policy -->
+    <section id="privacy">
+      <h2>Privacy Policy</h2>
+      <div class="privacy-block">
+        <h3>What we collect</h3>
+        <ul>
+          <li><strong>Email address</strong> — used solely for authentication (Firebase Auth). Never shared or sold.</li>
+          <li><strong>Sign-in method</strong> — we record whether you signed in with email, Google, or Apple. No other account data is collected.</li>
+          <li><strong>Revision data</strong> — subjects, topics, confidence levels, and study plans are stored <em>on your device only</em>. We cannot access this data.</li>
+        </ul>
+
+        <h3 style="margin-top:20px;">Third-party services</h3>
+        <ul>
+          <li><strong>Firebase Authentication</strong> (Google) — manages login. <a href="https://firebase.google.com/support/privacy" target="_blank">Firebase Privacy Policy</a>.</li>
+          <li><strong>Sign in with Apple</strong> — Apple's privacy-preserving sign-in. <a href="https://www.apple.com/legal/privacy/" target="_blank">Apple Privacy Policy</a>.</li>
+          <li><strong>Sign in with Google</strong> — standard Google OAuth. <a href="https://policies.google.com/privacy" target="_blank">Google Privacy Policy</a>.</li>
+        </ul>
+
+        <h3 style="margin-top:20px;">Data deletion</h3>
+        <p>To delete your account and all associated data, go to <strong>Settings → Log out</strong>, then <a href="https://github.com/gurolerdogan/NailExams/issues/new?title=Account+deletion+request" target="_blank">open a deletion request on GitHub</a>. We will remove your Firebase Auth account within 30 days.</p>
+
+        <p style="margin-top:16px;font-size:14px;color:var(--muted);">Last updated: May 2026 · NailExams is developed by Gurol Erdogan.</p>
+      </div>
+    </section>
+
+  </div>
+
+  <footer>
+    <div class="wrap">
+      NailExams &nbsp;·&nbsp;
+      <a href="https://github.com/gurolerdogan/NailExams" target="_blank">GitHub</a>
+      &nbsp;·&nbsp;
+      <a href="https://github.com/gurolerdogan/NailExams/issues/new" target="_blank">Support</a>
+      &nbsp;·&nbsp;
+      <a href="#privacy">Privacy Policy</a>
+    </div>
+  </footer>
+
+</body>
+</html>
