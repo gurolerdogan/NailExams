@@ -17,6 +17,7 @@ import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { usePlus } from '../context/PlusContext';
 import { loadTopics } from '../services/storage/nailexamsStorage';
 import { loadPlanConfig, savePlanConfig, savePlan } from '../services/storage/planStorage';
 import { generatePlan } from '../services/plan/generateWeeklyPlan';
@@ -256,6 +257,7 @@ type PlanMode = 'auto' | 'manual';
 export default function PlanSettingsScreen() {
   const { subjects } = useAuth();
   const { theme } = useTheme();
+  const { isPlus } = usePlus();
   const tabNav = useNavigation<BottomTabNavigationProp<AppTabParamList>>();
 
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -485,13 +487,22 @@ export default function PlanSettingsScreen() {
       <View style={styles.chipRow}>
         {DURATION_OPTIONS.map((d) => {
           const active = config.durationDays === d;
+          const locked = d > 30 && !isPlus;
           return (
             <Pressable
               key={d}
-              style={[styles.chip, active && styles.chipActive]}
-              onPress={() => setConfig((prev) => ({ ...prev, durationDays: d }))}
+              style={[styles.chip, active && styles.chipActive, locked && { opacity: 0.5 }]}
+              onPress={() => {
+                if (locked) {
+                  tabNav.navigate('Settings', { screen: 'Paywall' });
+                  return;
+                }
+                setConfig((prev) => ({ ...prev, durationDays: d }));
+              }}
             >
-              <Text style={[styles.chipText, active && styles.chipTextActive]}>{d} days</Text>
+              <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                {d} days{locked ? ' ✦' : ''}
+              </Text>
             </Pressable>
           );
         })}
@@ -794,17 +805,26 @@ export default function PlanSettingsScreen() {
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         {/* Mode selector */}
         <View style={styles.modePill}>
-          {(['auto', 'manual'] as PlanMode[]).map((m) => (
-            <Pressable
-              key={m}
-              style={[styles.modeOption, planMode === m && styles.modeOptionActive]}
-              onPress={() => setPlanMode(m)}
-            >
-              <Text style={[styles.modeOptionText, planMode === m && styles.modeOptionTextActive]}>
-                {m === 'auto' ? 'Auto-generate' : 'Plan manually'}
-              </Text>
-            </Pressable>
-          ))}
+          {(['auto', 'manual'] as PlanMode[]).map((m) => {
+            const locked = m === 'manual' && !isPlus;
+            return (
+              <Pressable
+                key={m}
+                style={[styles.modeOption, planMode === m && styles.modeOptionActive]}
+                onPress={() => {
+                  if (locked) {
+                    tabNav.navigate('Settings', { screen: 'Paywall' });
+                    return;
+                  }
+                  setPlanMode(m);
+                }}
+              >
+                <Text style={[styles.modeOptionText, planMode === m && styles.modeOptionTextActive]}>
+                  {m === 'auto' ? 'Auto-generate' : `Plan manually${locked ? ' ✦' : ''}`}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
 
         {planMode === 'auto' ? renderAutoSection() : renderManualSection()}

@@ -1,5 +1,6 @@
 import {
   createUserWithEmailAndPassword,
+  deleteUser,
   GoogleAuthProvider,
   OAuthProvider,
   sendPasswordResetEmail,
@@ -8,6 +9,7 @@ import {
   signOut,
   User,
 } from 'firebase/auth';
+import { wipeAll } from '../storage/nailexamsStorage';
 import Constants from 'expo-constants';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { getFirebaseAuth } from '../../firebase/config';
@@ -48,6 +50,22 @@ export async function logout(): Promise<void> {
   if (!IS_EXPO_GO) {
     try { await googleSignin().revokeAccess(); } catch { /* not signed in via Google */ }
   }
+}
+
+/**
+ * Permanently deletes the Firebase Auth account and wipes all local data.
+ * Firebase's onAuthStateChanged fires with null after this, automatically
+ * returning the user to the auth screen.
+ *
+ * May throw auth/requires-recent-login if the session is stale — in that
+ * case tell the user to sign out and sign back in before retrying.
+ */
+export async function deleteAccount(): Promise<void> {
+  const auth = getFirebaseAuth();
+  const user = auth.currentUser;
+  if (!user) throw new Error('No authenticated user found.');
+  await deleteUser(user);   // permanent — throws auth/requires-recent-login if stale session
+  await wipeAll();          // clear all local AsyncStorage data
 }
 
 export async function requestPasswordReset(email: string): Promise<void> {

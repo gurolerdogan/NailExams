@@ -2,6 +2,7 @@ import { getJson, setJson } from '../storage/storage';
 import { STORAGE_KEYS } from '../storage/keys';
 import { now } from '../../utils/time';
 import { uuid } from '../../utils/id';
+import { capture } from '../analytics/posthog';
 import type { LogEvent } from '../../types/logging';
 
 const MAX_LOGS = 200;
@@ -16,7 +17,10 @@ export async function logEvent(name: string, payload?: Record<string, any>): Pro
 
   if (__DEV__) console.log(`[NailExams] ${name}`, payload ?? {}); // eslint-disable-line no-console
 
-  // Best-effort persistence (never block UX)
+  // Forward to PostHog (no-op until API key is set)
+  capture(name, payload);
+
+  // Best-effort local persistence (never block UX)
   try {
     const current = await getJson<LogEvent[]>(STORAGE_KEYS.logsV1, []);
     const next = [entry, ...current].slice(0, MAX_LOGS);

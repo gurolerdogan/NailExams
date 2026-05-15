@@ -1,11 +1,13 @@
 import * as Notifications from 'expo-notifications';
 import { loadPlan } from '../storage/planStorage';
 import { loadTopics } from '../storage/nailexamsStorage';
-import { PLAN_REMINDERS, GENERIC_REMINDERS } from '../../notifications/messages';
+import { loadNotifSettings } from '../storage/notificationStorage';
+import { computeStreak } from '../../utils/streak';
+import { PLAN_REMINDERS, GENERIC_REMINDERS, STREAK_NUDGES } from '../../notifications/messages';
 import type { NotificationMessage } from '../../notifications/messages';
 
-const WINDOW_START = 15; // 3 pm
-const WINDOW_END   = 21; // 9 pm
+const STUDY_REMINDER_ID = 'ne-study-reminder';
+const STREAK_NUDGE_ID   = 'ne-streak-nudge';
 
 function toISODate(d: Date): string {
   const y = d.getFullYear();
@@ -28,54 +30,14 @@ function applyTemplate(msg: NotificationMessage, count: number) {
   };
 }
 
-/**
- * Returns the next Date that falls inside the [3pm, 9pm) local-time window.
- * - If now is before 3pm  → random time today in the window
- * - If now is in 3pm–9pm  → random time in the remaining portion of today's window
- * - If now is after 9pm   → random time tomorrow in the window
- */
-function nextWindowTime(): Date {
-  const now   = new Date();
-  const h     = now.getHours();
-  const span  = WINDOW_END - WINDOW_START; // hours available
-
+/** Returns a Date set to the given hour:minute today, or tomorrow if that time has passed. */
+function nextOccurrence(hour: number, minute: number): Date {
+  const now = new Date();
   const candidate = new Date(now);
-
-  if (h < WINDOW_START) {
-    // Before window — schedule somewhere today
-    candidate.setHours(
-      WINDOW_START + Math.floor(Math.random() * span),
-      Math.floor(Math.random() * 60),
-      0, 0,
-    );
-  } else if (h < WINDOW_END) {
-    // Inside window — schedule in the remaining time (at least 30 min ahead)
-    const remaining = WINDOW_END - h - 1; // whole hours left
-    if (remaining >= 1) {
-      candidate.setHours(
-        h + 1 + Math.floor(Math.random() * remaining),
-        Math.floor(Math.random() * 60),
-        0, 0,
-      );
-    } else {
-      // Less than 1 h left today — push to tomorrow
-      candidate.setDate(candidate.getDate() + 1);
-      candidate.setHours(
-        WINDOW_START + Math.floor(Math.random() * span),
-        Math.floor(Math.random() * 60),
-        0, 0,
-      );
-    }
-  } else {
-    // After window — schedule tomorrow
+  candidate.setHours(hour, minute, 0, 0);
+  if (candidate <= now) {
     candidate.setDate(candidate.getDate() + 1);
-    candidate.setHours(
-      WINDOW_START + Math.floor(Math.random() * span),
-      Math.floor(Math.random() * 60),
-      0, 0,
-    );
   }
-
   return candidate;
 }
 
@@ -85,19 +47,28 @@ export async function requestNotificationPermissions(): Promise<boolean> {
 }
 
 /**
- * Cancel any existing scheduled reminder and schedule a fresh one.
- * Safe to call on every app open — it's fast and idempotent.
+ * Cancels and reschedules both the study reminder and the streak-nudge.
+ * Safe to call on every app open — fast and idempotent.
  */
 export async function scheduleStudyReminder(): Promise<void> {
   try {
     const { status } = await Notifications.getPermissionsAsync();
     if (status !== 'granted') return;
 
+    // Cancel existing scheduled notifications by identifier
     await Notifications.cancelAllScheduledNotificationsAsync();
 
-    const todayISO = toISODate(new Date());
-    const [plan, topics] = await Promise.all([loadPlan(), loadTopics()]);
+    const [settings, plan, topics] = await Promise.all([
+      loadNotifSettings(),
+      loadPlan(),
+      loadTopics(),
+    ]);
 
+    if (!settings.enabled) return;
+
+    const todayISO = toISODate(new Date());
+
+    // ── Study reminder ──────────────────────────────────────────────────────────
     let title: string;
     let body: string;
 
@@ -112,7 +83,6 @@ export async function scheduleStudyReminder(): Promise<void> {
         title = formatted.title;
         body  = formatted.body;
       } else {
-        // All today's topics already checked in — use a generic message
         const msg = pickRandom(GENERIC_REMINDERS);
         title = msg.title;
         body  = msg.body;
@@ -123,19 +93,41 @@ export async function scheduleStudyReminder(): Promise<void> {
       body  = msg.body;
     }
 
-    const triggerDate = nextWindowTime();
+    const reminderDate = nextOccurrence(settings.reminderHour, settings.reminderMinute);
 
     await Notifications.scheduleNotificationAsync({
+      identifier: STUDY_REMINDER_ID,
       content: { title, body, sound: true },
-      trigger: { date: triggerDate } as any,
+      trigger: { date: reminderDate } as any,
     });
+
+    // ── Streak-nudge at 9 pm (only if the reminder isn't already at 9 pm) ──────
+    const streak = plan ? computeStreak(plan.sessions) : 0;
+    if (streak > 0) {
+      const nudgeHour   = 21;
+      const nudgeMinute = 0;
+      const nudgeIsDifferentFromReminder =
+        settings.reminderHour !== nudgeHour || settings.reminderMinute !== nudgeMinute;
+
+      if (nudgeIsDifferentFromReminder) {
+        const nudgeDate = nextOccurrence(nudgeHour, nudgeMinute);
+        const nudge = applyTemplate(pickRandom(STREAK_NUDGES), streak);
+
+        await Notifications.scheduleNotificationAsync({
+          identifier: STREAK_NUDGE_ID,
+          content: { title: nudge.title, body: nudge.body, sound: false },
+          trigger: { date: nudgeDate } as any,
+        });
+      }
+    }
 
     if (__DEV__) {
       // eslint-disable-next-line no-console
-      console.log(`[NailExams] Reminder scheduled for ${triggerDate.toLocaleTimeString()} — "${body}"`);
+      console.log(
+        `[NailExams] Reminder @ ${reminderDate.toLocaleTimeString()} | streak=${streak}`,
+      );
     }
   } catch (e) {
-    // Notifications are best-effort — never throw up to the caller
     if (__DEV__) console.warn('[NailExams] scheduleStudyReminder failed', e); // eslint-disable-line no-console
   }
 }

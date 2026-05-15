@@ -37,6 +37,29 @@ export const PLAN_REMINDERS: NotificationMessage[] = [
   },
 ];
 
+/**
+ * STREAK_NUDGES → sent at 9 pm when the user has an active streak but hasn't
+ * checked in yet today. Use {count} for the streak length, {s} for plural suffix.
+ */
+export const STREAK_NUDGES: NotificationMessage[] = [
+  {
+    title: 'Don\'t break your streak! 🔥',
+    body: 'You\'re on a {count}-day streak. One quick check-in keeps it alive.',
+  },
+  {
+    title: '{count} days strong 🔥',
+    body: 'Your streak ends at midnight — check in before you sleep!',
+  },
+  {
+    title: 'Streak at risk 🔥',
+    body: '{count} days in a row. Open NailExams before 12 am to keep it going.',
+  },
+  {
+    title: 'Almost there 🔥',
+    body: 'A {count}-day streak is worth protecting. 30 seconds is all it takes.',
+  },
+];
+
 export const GENERIC_REMINDERS: NotificationMessage[] = [
   {
     title: 'NailExams 📅',

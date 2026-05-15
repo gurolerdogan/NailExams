@@ -3,6 +3,7 @@ import { onAuthStateChanged, User } from 'firebase/auth';
 
 import { getFirebaseAuth } from '../firebase/config';
 import { logout as firebaseLogout } from '../services/auth/authService';
+import { identifyUser, resetAnalyticsUser } from '../services/analytics/posthog';
 import {
   ensureStorageVersion,
   getOnboardingDone,
@@ -66,9 +67,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(u ?? null);
 
         if (u) {
+          identifyUser(u.uid, u.email ?? undefined);
           await ensureStorageVersion();
           await Promise.all([refreshOnboarding(), refreshUserData()]);
         } else {
+          resetAnalyticsUser();
           setOnboardingComplete(false);
           setProfile(null);
           setSubjects([]);

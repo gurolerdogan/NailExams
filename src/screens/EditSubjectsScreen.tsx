@@ -13,6 +13,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { usePlus, FREE_SUBJECT_LIMIT } from '../context/PlusContext';
 import type { ExamLevel, Subject } from '../types/models';
 import { saveSubjects } from '../services/storage/nailexamsStorage';
 import { loadPlan } from '../services/storage/planStorage';
@@ -162,6 +163,7 @@ function createStyles(theme: Theme) {
 export default function EditSubjectsScreen({ navigation }: Props) {
   const { profile, subjects, refreshUserData } = useAuth();
   const { theme } = useTheme();
+  const { isPlus } = usePlus();
   const level = profile?.examLevel;
   const presets = useMemo(() => (level ? presetsFor(level) : []), [level]);
 
@@ -210,6 +212,17 @@ export default function EditSubjectsScreen({ navigation }: Props) {
     if (busy) return;
     if (selected.size === 0) {
       Alert.alert('Select at least 1 subject');
+      return;
+    }
+    if (!isPlus && selected.size > FREE_SUBJECT_LIMIT) {
+      Alert.alert(
+        'Plus required',
+        `Free accounts are limited to ${FREE_SUBJECT_LIMIT} subjects. Upgrade to NailExams Plus for unlimited subjects.`,
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Upgrade', onPress: () => navigation.navigate('Paywall') },
+        ],
+      );
       return;
     }
 

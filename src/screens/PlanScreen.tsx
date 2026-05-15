@@ -19,6 +19,7 @@ import type { WeeklyPlan } from '../types/plan';
 import { loadPlan, savePlan, clearPlan } from '../services/storage/planStorage';
 import { loadTopics } from '../services/storage/nailexamsStorage';
 import { now } from '../utils/time';
+import { computeStreak } from '../utils/streak';
 import { logEvent } from '../services/logging/logEvent';
 import type { AppTabParamList } from '../navigation/TabNavigator';
 import EmptyState from '../components/EmptyState';
@@ -58,26 +59,6 @@ function dayOfWeekMon(date: Date): number {
   return (date.getDay() + 6) % 7;
 }
 
-// ─── Streak helper ────────────────────────────────────────────────────────────
-function computeStreak(sessions: WeeklyPlan['sessions']): number {
-  if (!sessions.length) return 0;
-  const doneDates = new Set(
-    sessions.filter((s) => s.status === 'DONE').map((s) => s.date),
-  );
-  let streak = 0;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  for (let i = 0; i < 60; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - i);
-    if (doneDates.has(toISODate(d))) {
-      streak++;
-    } else {
-      break;
-    }
-  }
-  return streak;
-}
 
 function createStyles(theme: Theme) {
   return StyleSheet.create({
