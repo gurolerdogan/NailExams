@@ -5,6 +5,7 @@ import * as Notifications from 'expo-notifications';
 
 import { AuthProvider } from './src/context/AuthContext';
 import { ThemeProvider } from './src/context/ThemeContext';
+import { PlusProvider } from './src/context/PlusContext';
 import RootNavigator from './src/navigation/RootNavigator';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import { configureGoogleSignIn } from './src/services/auth/authService';
@@ -12,6 +13,11 @@ import {
   requestNotificationPermissions,
   scheduleStudyReminder,
 } from './src/services/notifications/notificationService';
+import { capture, getPostHog } from './src/services/analytics/posthog';
+import {
+  isRevenueCatConfigured,
+  configureRevenueCat,
+} from './src/services/purchases/purchasesService';
 
 // Show notifications when the app is in the foreground too
 Notifications.setNotificationHandler({
@@ -34,19 +40,31 @@ if (SOCIAL_AUTH_ENABLED) {
   }
 }
 
+// Configure RevenueCat early (before any component mounts)
+if (isRevenueCatConfigured()) {
+  configureRevenueCat();
+}
+
+
 export default function App() {
-  // Request permissions + schedule on first launch
+  // Request permissions + schedule on first launch; track first app open
   useEffect(() => {
+    capture('app_open');
+    // Force flush so the cold-start event isn't lost before the client warms up
+    void getPostHog()?.flush();
+
     void requestNotificationPermissions().then((granted) => {
       if (granted) void scheduleStudyReminder();
     });
   }, []);
 
-  // Reschedule whenever the app comes back to the foreground so the
-  // content always reflects the latest plan / check-in state
+  // Reschedule + track every foreground resume
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void scheduleStudyReminder();
+      if (state === 'active') {
+        capture('app_open');
+        void scheduleStudyReminder();
+      }
     });
     return () => sub.remove();
   }, []);
@@ -55,7 +73,9 @@ export default function App() {
     <ErrorBoundary>
       <ThemeProvider>
         <AuthProvider>
-          <RootNavigator />
+          <PlusProvider>
+            <RootNavigator />
+          </PlusProvider>
         </AuthProvider>
       </ThemeProvider>
     </ErrorBoundary>

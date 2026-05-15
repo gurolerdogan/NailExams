@@ -14,6 +14,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { loadPlan } from '../services/storage/planStorage';
 import { loadTopics } from '../services/storage/nailexamsStorage';
+import { computeStreak } from '../utils/streak';
 import type { WeeklyPlan } from '../types/plan';
 import type { Topic } from '../types/models';
 import type { AppTabParamList } from '../navigation/TabNavigator';
@@ -276,6 +277,11 @@ export default function HomeScreen() {
   const [allTopics, setAllTopics] = useState<Topic[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>(toISODate(new Date()));
 
+  const streak = useMemo(
+    () => (plan ? computeStreak(plan.sessions) : 0),
+    [plan],
+  );
+
   const load = useCallback(async () => {
     await refreshUserData();
     const [p, t] = await Promise.all([loadPlan(), loadTopics()]);
@@ -379,6 +385,12 @@ export default function HomeScreen() {
         <View style={styles.statCard}>
           <Text style={[styles.statVal, { color: '#1D9E75' }]}>{checkedInTopics}</Text>
           <Text style={styles.statLabel}>Checked in</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={[styles.statVal, { color: streak > 0 ? '#EF9F27' : undefined }]}>
+            {streak > 0 ? `${streak}🔥` : '—'}
+          </Text>
+          <Text style={styles.statLabel}>Streak</Text>
         </View>
       </View>
 

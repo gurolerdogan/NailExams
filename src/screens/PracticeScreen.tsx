@@ -25,6 +25,8 @@ import type { PracticeAttempt } from '../types/practice';
 import { uuid } from '../utils/id';
 import { now } from '../utils/time';
 import { logEvent } from '../services/logging/logEvent';
+import { PAST_PAPER_LINKS } from '../data/pastPaperLinks';
+import { Linking } from 'react-native';
 import type { AppTabParamList } from '../navigation/TabNavigator';
 import EmptyState from '../components/EmptyState';
 import { TILE_PALETTE } from '../constants/palette';
@@ -742,6 +744,20 @@ export default function PracticeScreen() {
             multiline
             editable={!busy}
           />
+
+          {selectedSubject && PAST_PAPER_LINKS[selectedSubject.name] && (
+            <Pressable
+              onPress={() => void Linking.openURL(PAST_PAPER_LINKS[selectedSubject!.name])}
+              style={{
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                gap: 6, paddingVertical: 10, marginBottom: 8,
+              }}
+            >
+              <Text style={{ fontSize: 13, color: theme.colors.accent, fontWeight: '600' }}>
+                Find past questions →
+              </Text>
+            </Pressable>
+          )}
 
           <Pressable
             style={[

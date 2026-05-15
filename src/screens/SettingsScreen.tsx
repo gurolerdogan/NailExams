@@ -1,13 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { wipeAll, loadTopics } from '../services/storage/nailexamsStorage';
 import { loadAttempts } from '../services/storage/practiceStorage';
+import { deleteAccount } from '../services/auth/authService';
 import { logEvent } from '../services/logging/logEvent';
 import { getAppEnv } from '../firebase/config';
+import {
+  loadNotifSettings,
+  saveNotifSettings,
+  type NotifSettings,
+} from '../services/storage/notificationStorage';
+import { scheduleStudyReminder } from '../services/notifications/notificationService';
+import { usePlus } from '../context/PlusContext';
 import type { Theme } from '../themes';
 
 const IS_DEV = getAppEnv() === 'development';
@@ -171,20 +179,54 @@ function createStyles(theme: Theme) {
 export default function SettingsScreen({ navigation }: Props) {
   const { theme } = useTheme();
   const { user, profile, subjects, logout, refreshOnboarding, refreshUserData } = useAuth();
+  const { isPlus } = usePlus();
 
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   const [topicCount, setTopicCount]     = useState(0);
   const [checkinCount, setCheckinCount] = useState(0);
+  const [notifSettings, setNotifSettings] = useState<NotifSettings>({
+    reminderHour: 19, reminderMinute: 0, enabled: true,
+  });
+  const [timePickerVisible, setTimePickerVisible] = useState(false);
+  const [draftHour, setDraftHour]     = useState(19);
+  const [draftMinute, setDraftMinute] = useState(0);
 
   const loadStats = useCallback(async () => {
-    const [topics, attempts] = await Promise.all([loadTopics(), loadAttempts()]);
+    const [topics, attempts, ns] = await Promise.all([
+      loadTopics(), loadAttempts(), loadNotifSettings(),
+    ]);
     setTopicCount(topics.length);
     setCheckinCount(attempts.length);
+    setNotifSettings(ns);
   }, []);
 
   useEffect(() => { void loadStats(); }, [loadStats]);
   useFocusEffect(useCallback(() => { void loadStats(); }, [loadStats]));
+
+  const formatTime = (h: number, m: number) => {
+    const period = h >= 12 ? 'pm' : 'am';
+    const displayH = h % 12 === 0 ? 12 : h % 12;
+    return `${displayH}:${String(m).padStart(2, '0')} ${period}`;
+  };
+
+  const openTimePicker = () => {
+    setDraftHour(notifSettings.reminderHour);
+    setDraftMinute(notifSettings.reminderMinute);
+    setTimePickerVisible(true);
+  };
+
+  const saveTime = async () => {
+    const updated: NotifSettings = {
+      ...notifSettings,
+      reminderHour: draftHour,
+      reminderMinute: draftMinute,
+    };
+    await saveNotifSettings(updated);
+    setNotifSettings(updated);
+    void scheduleStudyReminder();
+    setTimePickerVisible(false);
+  };
 
   const email        = user?.email ?? '—';
   const avatarLetter = user?.email ? user.email[0].toUpperCase() : '?';
@@ -223,7 +265,48 @@ export default function SettingsScreen({ navigation }: Props) {
     ]);
   };
 
+  const onDeleteAccount = () => {
+    Alert.alert(
+      'Delete account?',
+      'This will permanently delete your NailExams account and all your revision data. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete account',
+          style: 'destructive',
+          onPress: () => {
+            // Second confirmation — extra step required by Apple for destructive action
+            Alert.alert(
+              'Are you sure?',
+              'Your account and all data will be permanently deleted.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Yes, delete',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      await logEvent('account_deleted', {});
+                      await deleteAccount();
+                      // onAuthStateChanged fires with null → app transitions to auth screen
+                    } catch (e: any) {
+                      const msg = e?.code === 'auth/requires-recent-login'
+                        ? 'For security, please sign out and sign back in, then try again.'
+                        : 'Could not delete account. Please try again.';
+                      Alert.alert('Deletion failed', msg);
+                    }
+                  },
+                },
+              ],
+            );
+          },
+        },
+      ],
+    );
+  };
+
   return (
+    <>
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.screenTitle}>Settings</Text>
 
@@ -259,6 +342,40 @@ export default function SettingsScreen({ navigation }: Props) {
         </View>
       </View>
 
+      {/* ── Plus upsell / badge ── */}
+      {isPlus ? (
+        <View style={{
+          backgroundColor: '#EAF3DE', borderRadius: 14, padding: 14,
+          flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20,
+        }}>
+          <Text style={{ fontSize: 22 }}>🎉</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: '#27500A' }}>NailExams Plus</Text>
+            <Text style={{ fontSize: 12, color: '#27500A', opacity: 0.8, marginTop: 1 }}>All features unlocked</Text>
+          </View>
+          <View style={{ backgroundColor: '#27500A', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 }}>
+            <Text style={{ fontSize: 10, fontWeight: '700', color: '#EAF3DE' }}>PLUS</Text>
+          </View>
+        </View>
+      ) : (
+        <Pressable
+          onPress={() => navigation.navigate('Paywall')}
+          style={{
+            backgroundColor: '#1C1C1E', borderRadius: 14, padding: 16,
+            flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20,
+          }}
+        >
+          <Text style={{ fontSize: 24 }}>✨</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: '#FFFFFF' }}>Upgrade to Plus</Text>
+            <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 2 }}>
+              Unlimited subjects · all themes · longer plans
+            </Text>
+          </View>
+          <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 18 }}>›</Text>
+        </Pressable>
+      )}
+
       {/* ── Study section ── */}
       <Text style={styles.sectionLabel}>Study</Text>
       <View style={styles.menuGroup}>
@@ -275,6 +392,22 @@ export default function SettingsScreen({ navigation }: Props) {
           iconBg="#E6F1FB"
           label="Plan settings"
           onPress={() => navigation.navigate('PlanSettings')}
+          styles={styles}
+        />
+        <View style={styles.menuDivider} />
+        <MenuRow
+          icon="🔔"
+          iconBg="#FEF9C3"
+          label={`Reminder · ${formatTime(notifSettings.reminderHour, notifSettings.reminderMinute)}`}
+          onPress={openTimePicker}
+          styles={styles}
+        />
+        <View style={styles.menuDivider} />
+        <MenuRow
+          icon="📊"
+          iconBg="#E6F1FB"
+          label={isPlus ? 'Analytics' : 'Analytics ✦'}
+          onPress={() => navigation.navigate('Analytics')}
           styles={styles}
         />
         <View style={styles.menuDivider} />
@@ -297,6 +430,16 @@ export default function SettingsScreen({ navigation }: Props) {
           destructive
           showChevron={false}
           onPress={onLogout}
+          styles={styles}
+        />
+        <View style={styles.menuDivider} />
+        <MenuRow
+          icon="🗑️"
+          iconBg="#FCEBEB"
+          label="Delete account"
+          destructive
+          showChevron={false}
+          onPress={onDeleteAccount}
           styles={styles}
         />
       </View>
@@ -331,5 +474,96 @@ export default function SettingsScreen({ navigation }: Props) {
 
       <Text style={styles.versionText}>NailExams · v1.0</Text>
     </ScrollView>
+
+    {/* ── Reminder time picker modal ── */}
+    <Modal
+      visible={timePickerVisible}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setTimePickerVisible(false)}
+    >
+      <Pressable
+        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}
+        onPress={() => setTimePickerVisible(false)}
+      >
+        <Pressable
+          style={{
+            backgroundColor: theme.colors.cardBg,
+            borderTopLeftRadius: 24, borderTopRightRadius: 24,
+            padding: 24, paddingBottom: 40,
+          }}
+          onPress={() => {}}
+        >
+          <Text style={{ fontSize: 16, fontWeight: '600', color: theme.colors.textPrimary, marginBottom: 20 }}>
+            Daily reminder time
+          </Text>
+
+          {/* Hour picker */}
+          <Text style={{ fontSize: 12, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 0.5, color: theme.colors.textMuted, marginBottom: 8 }}>
+            Hour
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              {Array.from({ length: 24 }, (_, h) => {
+                const active = h === draftHour;
+                const label  = h === 0 ? '12 am' : h < 12 ? `${h} am` : h === 12 ? '12 pm' : `${h - 12} pm`;
+                return (
+                  <Pressable
+                    key={h}
+                    onPress={() => setDraftHour(h)}
+                    style={{
+                      paddingHorizontal: 14, paddingVertical: 9,
+                      borderRadius: 10,
+                      backgroundColor: active ? theme.colors.buttonPrimaryBg : theme.colors.screenBg,
+                    }}
+                  >
+                    <Text style={{ fontSize: 13, fontWeight: '500', color: active ? theme.colors.buttonPrimaryText : theme.colors.textPrimary }}>
+                      {label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </ScrollView>
+
+          {/* Minute picker */}
+          <Text style={{ fontSize: 12, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 0.5, color: theme.colors.textMuted, marginBottom: 8 }}>
+            Minute
+          </Text>
+          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 24 }}>
+            {[0, 15, 30, 45].map((m) => {
+              const active = m === draftMinute;
+              return (
+                <Pressable
+                  key={m}
+                  onPress={() => setDraftMinute(m)}
+                  style={{
+                    flex: 1, paddingVertical: 11, borderRadius: 10, alignItems: 'center',
+                    backgroundColor: active ? theme.colors.buttonPrimaryBg : theme.colors.screenBg,
+                  }}
+                >
+                  <Text style={{ fontSize: 13, fontWeight: '500', color: active ? theme.colors.buttonPrimaryText : theme.colors.textPrimary }}>
+                    :{String(m).padStart(2, '0')}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <Pressable
+            onPress={saveTime}
+            style={{
+              backgroundColor: theme.colors.buttonPrimaryBg, borderRadius: 16,
+              paddingVertical: 15, alignItems: 'center',
+            }}
+          >
+            <Text style={{ fontSize: 15, fontWeight: '600', color: theme.colors.buttonPrimaryText }}>
+              Set reminder for {formatTime(draftHour, draftMinute)}
+            </Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
+    </>
   );
 }
