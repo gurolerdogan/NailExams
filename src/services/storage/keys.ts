@@ -9,6 +9,8 @@ export const STORAGE_KEYS = {
   planV1: 'NE_PLAN_V1',
   planSettingsV1: 'NE_PLAN_SETTINGS_V1',
   notifSettingsV1: 'NE_NOTIF_SETTINGS_V1',
+  reviewPrompted: 'NE_REVIEW_PROMPTED',
+  weeklyGoalV1: 'NE_WEEKLY_GOAL_V1',
 } as const;
 
 export const CURRENT_STORAGE_VERSION = 1;

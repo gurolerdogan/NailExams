@@ -10,6 +10,7 @@ import PlanSettingsScreen from '../screens/PlanSettingsScreen';
 import ThemeSelectorScreen from '../screens/ThemeSelectorScreen';
 import PaywallScreen from '../screens/PaywallScreen';
 import AnalyticsScreen from '../screens/AnalyticsScreen';
+import ExamDatesScreen from '../screens/ExamDatesScreen';
 import { useTheme } from '../context/ThemeContext';
 
 export type SettingsStackParamList = {
@@ -20,6 +21,7 @@ export type SettingsStackParamList = {
   ThemeSelector: undefined;
   Paywall: undefined;
   Analytics: undefined;
+  ExamDates: undefined;
 };
 
 const Stack = createNativeStackNavigator<SettingsStackParamList>();
@@ -68,6 +70,7 @@ export default function SettingsNavigator() {
       <Stack.Screen name="Logs" component={LogsScreen} options={{ title: 'Logs' }} />
       <Stack.Screen name="Paywall" component={PaywallScreen} options={{ title: 'NailExams Plus' }} />
       <Stack.Screen name="Analytics" component={AnalyticsScreen} options={{ title: 'Analytics' }} />
+      <Stack.Screen name="ExamDates" component={ExamDatesScreen} options={{ title: 'Exam dates' }} />
     </Stack.Navigator>
   );
 }

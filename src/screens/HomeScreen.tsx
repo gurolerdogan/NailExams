@@ -14,7 +14,10 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { loadPlan } from '../services/storage/planStorage';
 import { loadTopics } from '../services/storage/nailexamsStorage';
+import { loadAttempts } from '../services/storage/practiceStorage';
+import { loadWeeklyGoal, type WeeklyGoal } from '../services/storage/weeklyGoalStorage';
 import { computeStreak } from '../utils/streak';
+import { maybePromptOnStreak } from '../utils/reviewPrompt';
 import type { WeeklyPlan } from '../types/plan';
 import type { Topic } from '../types/models';
 import type { AppTabParamList } from '../navigation/TabNavigator';
@@ -276,6 +279,8 @@ export default function HomeScreen() {
   const [plan, setPlan] = useState<WeeklyPlan | null>(null);
   const [allTopics, setAllTopics] = useState<Topic[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>(toISODate(new Date()));
+  const [weeklyGoal, setWeeklyGoal] = useState<WeeklyGoal | null>(null);
+  const [weekCheckins, setWeekCheckins] = useState(0);
 
   const streak = useMemo(
     () => (plan ? computeStreak(plan.sessions) : 0),
@@ -284,17 +289,45 @@ export default function HomeScreen() {
 
   const load = useCallback(async () => {
     await refreshUserData();
-    const [p, t] = await Promise.all([loadPlan(), loadTopics()]);
+    const [p, t, attempts, goal] = await Promise.all([
+      loadPlan(), loadTopics(), loadAttempts(), loadWeeklyGoal(),
+    ]);
     setPlan(p);
     setAllTopics(t);
+    setWeeklyGoal(goal);
+    // Count check-ins since Monday 00:00
+    const monday = new Date(); monday.setHours(0,0,0,0);
+    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+    setWeekCheckins(attempts.filter((a) => a.ts >= monday.getTime()).length);
   }, [refreshUserData]);
 
   useEffect(() => { void load(); }, [load]);
   useFocusEffect(useCallback(() => { void load(); }, [load]));
 
+  useEffect(() => {
+    if (streak > 0) void maybePromptOnStreak(streak);
+  }, [streak]);
+
   const email        = user?.email ?? '—';
   const avatarLetter = user?.email ? user.email[0].toUpperCase() : '?';
   const level        = profile?.examLevel ?? '—';
+
+  // Nearest upcoming exam date
+  const nextExam = useMemo(() => {
+    const dates = profile?.examDates ?? [];
+    if (!dates.length) return null;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const upcoming = dates
+      .map((e) => {
+        const d = new Date(e.date + 'T00:00:00');
+        const days = Math.round((d.getTime() - today.getTime()) / 86400000);
+        const subject = subjects.find((s) => s.id === e.subjectId);
+        return { days, name: subject?.name ?? 'Exam' };
+      })
+      .filter((e) => e.days >= 0)
+      .sort((a, b) => a.days - b.days);
+    return upcoming[0] ?? null;
+  }, [profile, subjects]);
 
   const subjectStats = useMemo(() => {
     const map = new Map<string, { bars: number[]; checkedIn: number; total: number }>();
@@ -393,6 +426,50 @@ export default function HomeScreen() {
           <Text style={styles.statLabel}>Streak</Text>
         </View>
       </View>
+
+      {/* ── Exam countdown banner ── */}
+      {nextExam && (
+        <View style={{
+          flexDirection: 'row', alignItems: 'center', gap: 10,
+          backgroundColor: nextExam.days < 14 ? '#FCEBEB' : nextExam.days < 30 ? '#FAEEDA' : theme.colors.cardBg,
+          borderRadius: 12, padding: 12, marginBottom: 14,
+        }}>
+          <Text style={{ fontSize: 18 }}>📅</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{
+              fontSize: 13, fontWeight: '700',
+              color: nextExam.days < 14 ? '#A32D2D' : nextExam.days < 30 ? '#633806' : theme.colors.textPrimary,
+            }}>
+              {nextExam.days === 0 ? 'Today!' : `${nextExam.days}d`} · {nextExam.name}
+            </Text>
+            <Text style={{ fontSize: 11, color: theme.colors.textMuted, marginTop: 1 }}>
+              {nextExam.days < 14 ? 'Almost there — keep checking in!' : nextExam.days < 30 ? 'Getting close — stay on track' : 'Exam coming up — you\'ve got this'}
+            </Text>
+          </View>
+        </View>
+      )}
+
+      {/* ── Weekly goal progress bar ── */}
+      {weeklyGoal && (
+        <View style={{ marginBottom: 14 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+            <Text style={{ fontSize: 12, fontWeight: '600', color: theme.colors.textPrimary }}>
+              Weekly goal
+            </Text>
+            <Text style={{ fontSize: 12, color: weekCheckins >= weeklyGoal ? '#1D9E75' : theme.colors.textMuted, fontWeight: '600' }}>
+              {weekCheckins} / {weeklyGoal} topics
+            </Text>
+          </View>
+          <View style={{ height: 7, backgroundColor: theme.colors.cardBg, borderRadius: 4, overflow: 'hidden' }}>
+            <View style={{
+              height: '100%',
+              width: `${Math.min((weekCheckins / weeklyGoal) * 100, 100)}%`,
+              backgroundColor: weekCheckins >= weeklyGoal ? '#1D9E75' : theme.colors.accent,
+              borderRadius: 4,
+            }} />
+          </View>
+        </View>
+      )}
 
       <View style={styles.pillSwitcher}>
         <Pressable

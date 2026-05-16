@@ -15,6 +15,7 @@ import type { OnboardingStackParamList } from '../../navigation/OnboardingNaviga
 import type { ExamLevel } from '../../types/models';
 import { GCSE_SUBJECT_PRESETS, ALEVEL_SUBJECT_PRESETS } from '../../data/gcseTopicCatalog';
 import { TILE_PALETTE } from '../../constants/palette';
+import { usePlus, FREE_SUBJECT_LIMIT } from '../../context/PlusContext';
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, 'OnboardingSubjects'>;
 
@@ -27,6 +28,7 @@ const PRESET_SUBJECTS: PresetMap = {
 
 export default function OnboardingSubjectsScreen({ navigation, route }: Props) {
   const { examLevel } = route.params;
+  const { isPlus } = usePlus();
   const presets = PRESET_SUBJECTS[examLevel];
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -41,8 +43,20 @@ export default function OnboardingSubjectsScreen({ navigation, route }: Props) {
   const toggle = (name: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
+      if (next.has(name)) {
+        next.delete(name);
+        return next;
+      }
+      // Gate: free users limited to FREE_SUBJECT_LIMIT subjects
+      if (!isPlus && next.size >= FREE_SUBJECT_LIMIT) {
+        Alert.alert(
+          `Free plan: up to ${FREE_SUBJECT_LIMIT} subjects`,
+          `You've selected ${FREE_SUBJECT_LIMIT} subjects. Upgrade to NailExams Plus for unlimited subjects — you can do this from Settings after setup.`,
+          [{ text: 'OK' }],
+        );
+        return prev;
+      }
+      next.add(name);
       return next;
     });
   };
@@ -148,6 +162,13 @@ export default function OnboardingSubjectsScreen({ navigation, route }: Props) {
 
       {/* Sticky footer */}
       <View style={styles.footer}>
+        {!isPlus && (
+          <Text style={{ textAlign: 'center', fontSize: 12, color: '#888', marginBottom: 8 }}>
+            {selected.size >= FREE_SUBJECT_LIMIT
+              ? `${FREE_SUBJECT_LIMIT}/${FREE_SUBJECT_LIMIT} subjects selected · upgrade for unlimited ✦`
+              : `Free plan · ${FREE_SUBJECT_LIMIT - selected.size} subject slot${FREE_SUBJECT_LIMIT - selected.size !== 1 ? 's' : ''} remaining`}
+          </Text>
+        )}
         <Pressable
           style={[styles.nextBtn, selected.size === 0 && { opacity: 0.4 }]}
           onPress={onNext}
