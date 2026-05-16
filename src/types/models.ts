@@ -2,11 +2,17 @@ export type UUID = string;
 
 export type ExamLevel = 'GCSE' | 'A_LEVEL';
 
+export type ExamDate = {
+  subjectId: string;
+  date: string; // ISO date: 'YYYY-MM-DD'
+};
+
 export type UserProfile = {
   examLevel: ExamLevel;
   yearGroup?: string;
   timezone?: string;
   targetGrades?: Record<string, string>;
+  examDates?: ExamDate[];
   createdAt: number;
   updatedAt: number;
 };

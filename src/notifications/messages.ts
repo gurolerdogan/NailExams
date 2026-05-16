@@ -60,6 +60,25 @@ export const STREAK_NUDGES: NotificationMessage[] = [
   },
 ];
 
+/**
+ * WEEKLY_SUMMARY → sent every Sunday at 8 pm with a summary of the week.
+ * Use {checkins} for check-ins that week, {streak} for current streak.
+ */
+export const WEEKLY_SUMMARY: NotificationMessage[] = [
+  {
+    title: 'Your week in NailExams 📊',
+    body: '{checkins} check-in{s} this week · {streak} day streak. Keep the momentum going!',
+  },
+  {
+    title: 'Weekly recap 📚',
+    body: 'You checked in {checkins} topic{s} this week. {streak} days strong!',
+  },
+  {
+    title: 'NailExams weekly update 🎯',
+    body: '{checkins} topic{s} checked in this week — {streak} day streak and counting.',
+  },
+];
+
 export const GENERIC_REMINDERS: NotificationMessage[] = [
   {
     title: 'NailExams 📅',

@@ -20,6 +20,7 @@ import { useTheme } from '../context/ThemeContext';
 import { usePlus } from '../context/PlusContext';
 import { loadTopics } from '../services/storage/nailexamsStorage';
 import { loadPlanConfig, savePlanConfig, savePlan } from '../services/storage/planStorage';
+import { loadWeeklyGoal, saveWeeklyGoal, type WeeklyGoal } from '../services/storage/weeklyGoalStorage';
 import { generatePlan } from '../services/plan/generateWeeklyPlan';
 import { logEvent } from '../services/logging/logEvent';
 import { uuid } from '../utils/id';
@@ -266,6 +267,7 @@ export default function PlanSettingsScreen() {
   const [planMode, setPlanMode] = useState<PlanMode>('auto');
   const [topics, setTopics]     = useState<Topic[]>([]);
   const [busy, setBusy]         = useState(false);
+  const [weeklyGoal, setWeeklyGoal] = useState<WeeklyGoal | null>(null);
 
   // ── auto-generate ────────────────────────────────────────────────────────────
   const [config, setConfig] = useState<PlanConfig>(DEFAULT_CONFIG);
@@ -289,8 +291,9 @@ export default function PlanSettingsScreen() {
   subjectsRef.current = subjects;
 
   const load = useCallback(async () => {
-    const [savedConfig, allTopics] = await Promise.all([loadPlanConfig(), loadTopics()]);
+    const [savedConfig, allTopics, goal] = await Promise.all([loadPlanConfig(), loadTopics(), loadWeeklyGoal()]);
     setTopics(allTopics);
+    setWeeklyGoal(goal);
     const currentSubjects = subjectsRef.current;
     const subjectIds =
       savedConfig.subjectIds.length > 0
@@ -573,6 +576,27 @@ export default function PlanSettingsScreen() {
           </Pressable>
         );
       })}
+
+      <Text style={styles.sectionLabel}>Weekly check-in goal</Text>
+      <View style={styles.chipRow}>
+        {([null, 5, 10, 15, 20] as Array<WeeklyGoal | null>).map((g) => {
+          const active = weeklyGoal === g;
+          return (
+            <Pressable
+              key={String(g)}
+              style={[styles.chip, active && styles.chipActive]}
+              onPress={() => {
+                setWeeklyGoal(g);
+                void saveWeeklyGoal(g);
+              }}
+            >
+              <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                {g === null ? 'Off' : `${g}/wk`}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
 
       {canGenerate ? (
         <Text style={styles.estimate}>

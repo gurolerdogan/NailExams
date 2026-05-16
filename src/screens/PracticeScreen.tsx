@@ -27,6 +27,7 @@ import { now } from '../utils/time';
 import { logEvent } from '../services/logging/logEvent';
 import { PAST_PAPER_LINKS } from '../data/pastPaperLinks';
 import { Linking } from 'react-native';
+import { maybePromptOnNailedIt } from '../utils/reviewPrompt';
 import type { AppTabParamList } from '../navigation/TabNavigator';
 import EmptyState from '../components/EmptyState';
 import { TILE_PALETTE } from '../constants/palette';
@@ -309,8 +310,10 @@ export default function PracticeScreen() {
   const [note, setNote]                         = useState('');
   const [busy, setBusy]                         = useState(false);
   const [sheetVisible, setSheetVisible]         = useState(false);
+  const [celebration, setCelebration]           = useState<{ emoji: string; title: string; sub: string } | null>(null);
 
-  const slideAnim = useRef(new Animated.Value(300)).current;
+  const slideAnim       = useRef(new Animated.Value(300)).current;
+  const celebrationAnim = useRef(new Animated.Value(0)).current;
 
   // Keep a ref so openSheet can read the latest notes without being a dep of the
   // topicIdFromNav effect — prevents the sheet from re-opening after every save.
@@ -445,6 +448,16 @@ export default function PracticeScreen() {
     });
 
   // ── Save check-in ─────────────────────────────────────────────────────────────
+  const showCelebration = (payload: { emoji: string; title: string; sub: string }) => {
+    setCelebration(payload);
+    celebrationAnim.setValue(0);
+    Animated.sequence([
+      Animated.spring(celebrationAnim, { toValue: 1, useNativeDriver: true, damping: 14, stiffness: 160 }),
+      Animated.delay(1600),
+      Animated.timing(celebrationAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+    ]).start(() => setCelebration(null));
+  };
+
   const submit = async () => {
     if (busy || !selectedSubject || !sheetTopic || confidence === null) return;
 
@@ -488,6 +501,24 @@ export default function PracticeScreen() {
         confidence,
         noteLen: note.trim().length,
       });
+
+      const allAttempts = await loadAttempts();
+      void maybePromptOnNailedIt(confidence, allAttempts.length);
+
+      // Check for milestone celebrations
+      const prevConfidence = allTopics[idx]?.confidence ?? 0;
+      const allSubjectTopics = allTopics.filter((t) => t.subjectId === selectedSubject.id);
+      const allNowHigh = allSubjectTopics.every((t) =>
+        t.id === sheetTopic.id ? confidence >= 4 : (t.confidence ?? 0) >= 4,
+      );
+
+      if (confidence === 5 && prevConfidence < 5) {
+        void logEvent('topic_nailed', { topicId: sheetTopic.id, subjectId: selectedSubject.id });
+        showCelebration({ emoji: '🎯', title: 'Nailed it!', sub: sheetTopic.name });
+      } else if (allNowHigh && allSubjectTopics.length > 0) {
+        void logEvent('subject_completed', { subjectId: selectedSubject.id });
+        showCelebration({ emoji: '🏆', title: `${selectedSubject.name} complete!`, sub: 'All topics at confident or above' });
+      }
 
       closeSheet();
     } catch (e: any) {
@@ -782,6 +813,37 @@ export default function PracticeScreen() {
     <>
       {!selectedSubject ? renderSubjectGrid() : renderTopicList()}
       {renderSheet()}
+
+      {/* ── Milestone celebration overlay ── */}
+      {celebration && (
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            ...StyleSheet.absoluteFillObject,
+            alignItems: 'center',
+            justifyContent: 'center',
+            opacity: celebrationAnim,
+            transform: [{ scale: celebrationAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) }],
+          }}
+        >
+          <View style={{
+            backgroundColor: 'rgba(10,10,12,0.92)',
+            borderRadius: 24,
+            paddingHorizontal: 36,
+            paddingVertical: 32,
+            alignItems: 'center',
+            gap: 8,
+          }}>
+            <Text style={{ fontSize: 52 }}>{celebration.emoji}</Text>
+            <Text style={{ fontSize: 22, fontWeight: '800', color: '#FFFFFF', textAlign: 'center' }}>
+              {celebration.title}
+            </Text>
+            <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', textAlign: 'center' }}>
+              {celebration.sub}
+            </Text>
+          </View>
+        </Animated.View>
+      )}
     </>
   );
 }

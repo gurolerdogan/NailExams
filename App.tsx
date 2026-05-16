@@ -12,6 +12,7 @@ import { configureGoogleSignIn } from './src/services/auth/authService';
 import {
   requestNotificationPermissions,
   scheduleStudyReminder,
+  scheduleWeeklySummary,
 } from './src/services/notifications/notificationService';
 import { capture, getPostHog } from './src/services/analytics/posthog';
 import {
@@ -54,7 +55,10 @@ export default function App() {
     void getPostHog()?.flush();
 
     void requestNotificationPermissions().then((granted) => {
-      if (granted) void scheduleStudyReminder();
+      if (granted) {
+        void scheduleStudyReminder();
+        void scheduleWeeklySummary();
+      }
     });
   }, []);
 
@@ -64,6 +68,7 @@ export default function App() {
       if (state === 'active') {
         capture('app_open');
         void scheduleStudyReminder();
+        void scheduleWeeklySummary();
       }
     });
     return () => sub.remove();

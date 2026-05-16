@@ -9,8 +9,8 @@ import { Platform } from 'react-native';
  *   - Create offering ID: "default"
  *   - Add two packages: "$rc_monthly" and "$rc_annual"
  */
-const RC_API_KEY_IOS     = 'appl_REPLACE_WITH_YOUR_IOS_KEY';
-const RC_API_KEY_ANDROID = 'goog_REPLACE_WITH_YOUR_ANDROID_KEY';
+const RC_API_KEY_IOS:     string = 'appl_NhimetkwHswzUtIWPfLiLUHoakG';
+const RC_API_KEY_ANDROID: string = 'goog_REPLACE_WITH_YOUR_ANDROID_KEY';
 
 export const PLUS_ENTITLEMENT_ID = 'plus';
 

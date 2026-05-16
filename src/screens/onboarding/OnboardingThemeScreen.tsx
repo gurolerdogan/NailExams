@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  Alert,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -11,27 +12,49 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
+import { usePlus } from '../../context/PlusContext';
 import { setOnboardingDone } from '../../services/storage/nailexamsStorage';
 import { logEvent } from '../../services/logging/logEvent';
 import { THEME_REGISTRY } from '../../themes';
 import type { OnboardingStackParamList } from '../../navigation/OnboardingNavigator';
+
+const FREE_THEME_ID = 'default';
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, 'OnboardingTheme'>;
 
 export default function OnboardingThemeScreen({ navigation: _nav }: Props) {
   const { refreshOnboarding } = useAuth();
   const { theme: activeTheme, setThemeId } = useTheme();
+  const { isPlus } = usePlus();
 
   const [selectedId, setSelectedId] = useState(activeTheme.id);
   const [busy, setBusy] = useState(false);
+
+  const onThemePress = (themeId: string) => {
+    const locked = !isPlus && themeId !== FREE_THEME_ID;
+    if (locked) {
+      Alert.alert(
+        'Plus theme ✦',
+        'This theme is available on NailExams Plus. You can upgrade from Settings after setup — your selection will be saved as Default for now.',
+        [
+          { text: 'Select anyway', onPress: () => setSelectedId(themeId) },
+          { text: 'Keep Default', style: 'cancel' },
+        ],
+      );
+      return;
+    }
+    setSelectedId(themeId);
+  };
 
   const onStart = async () => {
     if (busy) return;
     try {
       setBusy(true);
-      await setThemeId(selectedId);
+      // If a locked theme was selected and user is still free, fall back to default
+      const themeToSave = (!isPlus && selectedId !== FREE_THEME_ID) ? FREE_THEME_ID : selectedId;
+      await setThemeId(themeToSave);
       await setOnboardingDone(true);
-      await logEvent('onboarding_completed', { theme: selectedId });
+      await logEvent('onboarding_completed', { theme: themeToSave });
       await refreshOnboarding();
     } finally {
       setBusy(false);
@@ -58,12 +81,13 @@ export default function OnboardingThemeScreen({ navigation: _nav }: Props) {
 
         {/* Theme cards */}
         {THEME_REGISTRY.map((t) => {
-          const active = t.id === selectedId;
+          const active  = t.id === selectedId;
+          const locked  = !isPlus && t.id !== FREE_THEME_ID;
           return (
             <Pressable
               key={t.id}
-              style={[styles.card, active && styles.cardActive]}
-              onPress={() => setSelectedId(t.id)}
+              style={[styles.card, active && styles.cardActive, locked && { opacity: 0.65 }]}
+              onPress={() => onThemePress(t.id)}
             >
               {/* Swatch row */}
               <View style={styles.swatchRow}>
@@ -72,11 +96,15 @@ export default function OnboardingThemeScreen({ navigation: _nav }: Props) {
                 ))}
               </View>
 
-              {/* Info + radio */}
+              {/* Info + radio / lock badge */}
               <View style={styles.infoRow}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.cardName}>{t.name}</Text>
-                  <Text style={styles.cardDesc}>{t.description}</Text>
+                  <Text style={styles.cardName}>
+                    {t.name}{locked ? '  ✦' : ''}
+                  </Text>
+                  <Text style={styles.cardDesc}>
+                    {locked ? 'NailExams Plus · ' : ''}{t.description}
+                  </Text>
                 </View>
                 <View style={[styles.radio, active && styles.radioActive]}>
                   {active && <View style={styles.radioDot} />}

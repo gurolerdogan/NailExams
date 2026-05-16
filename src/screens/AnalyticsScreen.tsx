@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -8,6 +8,7 @@ import {
   View,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import ViewShot, { type ViewShotRef } from 'react-native-view-shot';
 
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -203,6 +204,7 @@ export default function AnalyticsScreen() {
   const [range, setRange]             = useState<Range>(30);
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   const [sharing, setSharing]         = useState(false);
+  const cardRef = useRef<ViewShotRef>(null);
 
   const load = useCallback(async () => {
     const [a, t] = await Promise.all([loadAttempts(), loadTopics()]);
@@ -271,29 +273,39 @@ export default function AnalyticsScreen() {
   const onShare = async () => {
     if (sharing) return;
     setSharing(true);
-    const subject = subjects.find((s) => s.id === selectedSubjectId);
-    const lines = [
-      `📊 NailExams Progress Report`,
-      `Period: Last ${range} days${subject ? ` · ${subject.name}` : ''}`,
-      ``,
-      `Check-ins: ${totalCheckIns}`,
-      `Avg confidence: ${avgConfidence}/5`,
-      ``,
-    ];
-    if (topicTrend.length) {
-      lines.push(`Most improved topics:`);
-      for (const t of topicTrend) {
-        const topic = topicMap.get(t.topicId);
-        if (!topic) continue;
-        const arrow = t.delta > 0 ? `↑${t.delta}` : t.delta < 0 ? `↓${Math.abs(t.delta)}` : '→';
-        lines.push(`  ${arrow}  ${topic.name}`);
-      }
-      lines.push('');
-    }
-    lines.push(`Generated with NailExams`);
     try {
-      await Share.share({ message: lines.join('\n') });
-      void logEvent('progress_shared', { range, subjectId: selectedSubjectId });
+      // Try image card first
+      let uri: string | null = null;
+      if (cardRef.current?.capture) {
+        try { uri = await (cardRef.current as ViewShotRef).capture(); } catch { /* fall through */ }
+      }
+
+      if (uri) {
+        await Share.share({ url: uri });
+      } else {
+        // Fallback: plain text (Android or if capture fails)
+        const subject = subjects.find((s) => s.id === selectedSubjectId);
+        const lines = [
+          `📊 NailExams Progress Report`,
+          `Period: Last ${range} days${subject ? ` · ${subject.name}` : ''}`,
+          ``,
+          `Check-ins: ${totalCheckIns}`,
+          `Avg confidence: ${avgConfidence}/5`,
+          ``,
+        ];
+        if (topicTrend.length) {
+          lines.push(`Most improved topics:`);
+          for (const t of topicTrend) {
+            const topic = topicMap.get(t.topicId);
+            if (!topic) continue;
+            const arrow = t.delta > 0 ? `↑${t.delta}` : t.delta < 0 ? `↓${Math.abs(t.delta)}` : '→';
+            lines.push(`  ${arrow}  ${topic.name}`);
+          }
+        }
+        lines.push(`\nGenerated with NailExams`);
+        await Share.share({ message: lines.join('\n') });
+      }
+      void logEvent('progress_shared', { range, subjectId: selectedSubjectId, format: uri ? 'image' : 'text' });
     } catch { /* user dismissed */ }
     setSharing(false);
   };
@@ -411,6 +423,96 @@ export default function AnalyticsScreen() {
       <Pressable style={[styles.shareBtn, sharing && { opacity: 0.5 }]} onPress={onShare} disabled={sharing}>
         <Text style={styles.shareBtnText}>{sharing ? 'Sharing…' : 'Share progress report'}</Text>
       </Pressable>
+
+      {/* Hidden branded card — captured by ViewShot when sharing */}
+      <View style={{ position: 'absolute', left: -9999, top: -9999 }}>
+        <ViewShot ref={cardRef} options={{ format: 'png', quality: 1 }}>
+          <View style={{
+            width: 360, backgroundColor: '#0A0A0C',
+            borderRadius: 20, padding: 24, gap: 16,
+          }}>
+            {/* Header */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: '800', letterSpacing: -0.5 }}>
+                NailExams
+              </Text>
+              <View style={{ backgroundColor: '#1C1C22', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 }}>
+                <Text style={{ color: '#888', fontSize: 11, fontWeight: '600' }}>
+                  {range}-day report
+                </Text>
+              </View>
+            </View>
+
+            {/* Subject name */}
+            {selectedSubjectId && (
+              <Text style={{ color: '#FFFFFF', fontSize: 22, fontWeight: '700' }}>
+                {subjects.find((s) => s.id === selectedSubjectId)?.name ?? ''}
+              </Text>
+            )}
+
+            {/* Stats row */}
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              {[
+                { val: String(totalCheckIns), label: 'Check-ins' },
+                { val: `${avgConfidence}/5`, label: 'Avg confidence' },
+                { val: String(weeks.length), label: 'Active weeks' },
+              ].map(({ val, label }) => (
+                <View key={label} style={{ flex: 1, backgroundColor: '#1C1C22', borderRadius: 12, padding: 10 }}>
+                  <Text style={{ color: '#FFFFFF', fontSize: 20, fontWeight: '700' }}>{val}</Text>
+                  <Text style={{ color: '#666', fontSize: 10, marginTop: 2 }}>{label}</Text>
+                </View>
+              ))}
+            </View>
+
+            {/* Confidence bars */}
+            {weeks.length > 0 && (
+              <View style={{ gap: 5 }}>
+                {weeks.slice(-6).map((w, i) => {
+                  const conf  = Math.round(w.avgConf);
+                  const color = CONF_COLORS[conf - 1] ?? '#888';
+                  const maxC  = Math.max(...weeks.map((x) => x.count), 1);
+                  return (
+                    <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Text style={{ color: '#555', fontSize: 9, width: 30, textAlign: 'right' }}>{w.weekLabel}</Text>
+                      <View style={{ flex: 1, height: 16, backgroundColor: '#1C1C22', borderRadius: 4, overflow: 'hidden' }}>
+                        <View style={{ width: `${Math.max((w.count / maxC) * 100, 4)}%`, height: '100%', backgroundColor: color, borderRadius: 4 }} />
+                      </View>
+                      <Text style={{ color, fontSize: 9, fontWeight: '700', width: 18 }}>{conf}/5</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+
+            {/* Top improved topics */}
+            {topicTrend.slice(0, 3).length > 0 && (
+              <View style={{ gap: 6 }}>
+                <Text style={{ color: '#555', fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  Most improved
+                </Text>
+                {topicTrend.slice(0, 3).map((t) => {
+                  const topic = topicMap.get(t.topicId);
+                  if (!topic) return null;
+                  const color = CONF_COLORS[t.latest - 1];
+                  const arrow = t.delta > 0 ? `↑${t.delta}` : '→';
+                  return (
+                    <View key={t.topicId} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Text style={{ color, fontWeight: '700', fontSize: 11, width: 24 }}>{arrow}</Text>
+                      <Text style={{ color: '#CCC', fontSize: 12, flex: 1 }} numberOfLines={1}>{topic.name}</Text>
+                      <Text style={{ color, fontSize: 11, fontWeight: '700' }}>{t.latest}/5</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+
+            {/* Footer */}
+            <Text style={{ color: '#333', fontSize: 10, textAlign: 'center', marginTop: 4 }}>
+              nailexams.app
+            </Text>
+          </View>
+        </ViewShot>
+      </View>
     </ScrollView>
   );
 }

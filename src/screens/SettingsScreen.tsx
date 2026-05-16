@@ -404,6 +404,14 @@ export default function SettingsScreen({ navigation }: Props) {
         />
         <View style={styles.menuDivider} />
         <MenuRow
+          icon="📆"
+          iconBg="#FAEEDA"
+          label="Exam dates"
+          onPress={() => navigation.navigate('ExamDates')}
+          styles={styles}
+        />
+        <View style={styles.menuDivider} />
+        <MenuRow
           icon="📊"
           iconBg="#E6F1FB"
           label={isPlus ? 'Analytics' : 'Analytics ✦'}

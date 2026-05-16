@@ -10,9 +10,33 @@ function toISODate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+/**
+ * Spaced-repetition priority score — lower = higher priority (scheduled sooner).
+ *
+ * Resurfacing intervals by confidence:
+ *   0 (never checked in): treat as overdue immediately
+ *   1–2: resurface every 3 days
+ *   3:   resurface every 7 days
+ *   4–5: resurface every 14 days
+ *
+ * Topics overdue for their interval get a strong priority boost; topics that
+ * were recently practised within their interval are deprioritised.
+ */
 function topicSortKey(t: Topic): number {
-  // confidence 0 first (never checked in), then 1–5; ties broken by oldest practice
-  return (t.confidence ?? 0) * 1_000_000_000 + (t.lastPracticedAt ?? 0);
+  const conf = t.confidence ?? 0;
+  if (conf === 0) return 0; // never checked in — always first
+
+  const intervalDays = conf <= 2 ? 3 : conf === 3 ? 7 : 14;
+  const intervalMs   = intervalDays * 24 * 60 * 60 * 1000;
+  const lastPracticed = t.lastPracticedAt ?? 0;
+  const daysSince = (Date.now() - lastPracticed) / (24 * 60 * 60 * 1000);
+  const overdueDays = daysSince - intervalDays; // positive = overdue, negative = not yet due
+
+  // Base score: confidence band (low confidence → higher priority)
+  // Overdue penalty flips sign: overdue topics get a negative offset, pulling them forward
+  const base = conf * 1000;
+  const overdueBoost = Math.max(overdueDays, 0) * 10; // every overdue day = -10 from score
+  return base - overdueBoost;
 }
 
 export function generatePlan(params: {

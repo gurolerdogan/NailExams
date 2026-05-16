@@ -3,7 +3,8 @@ import { loadPlan } from '../storage/planStorage';
 import { loadTopics } from '../storage/nailexamsStorage';
 import { loadNotifSettings } from '../storage/notificationStorage';
 import { computeStreak } from '../../utils/streak';
-import { PLAN_REMINDERS, GENERIC_REMINDERS, STREAK_NUDGES } from '../../notifications/messages';
+import { PLAN_REMINDERS, GENERIC_REMINDERS, STREAK_NUDGES, WEEKLY_SUMMARY } from '../../notifications/messages';
+import { loadAttempts } from '../storage/practiceStorage';
 import type { NotificationMessage } from '../../notifications/messages';
 
 const STUDY_REMINDER_ID = 'ne-study-reminder';
@@ -129,5 +130,56 @@ export async function scheduleStudyReminder(): Promise<void> {
     }
   } catch (e) {
     if (__DEV__) console.warn('[NailExams] scheduleStudyReminder failed', e); // eslint-disable-line no-console
+  }
+}
+
+const WEEKLY_SUMMARY_ID = 'ne-weekly-summary';
+
+/**
+ * Schedules (or reschedules) a weekly summary notification for the next Sunday at 8 pm.
+ * Safe to call on every app open — cancels the previous one first.
+ */
+export async function scheduleWeeklySummary(): Promise<void> {
+  try {
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status !== 'granted') return;
+
+    // Find next Sunday 8pm
+    const now  = new Date();
+    const next = new Date(now);
+    const dow  = now.getDay(); // 0=Sun
+    const daysUntilSunday = dow === 0 ? 7 : 7 - dow; // always next Sunday, not today
+    next.setDate(now.getDate() + daysUntilSunday);
+    next.setHours(20, 0, 0, 0);
+
+    // Compute this week's check-ins (Mon–now)
+    const attempts  = await loadAttempts();
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - ((now.getDay() + 6) % 7)); // Monday
+    weekStart.setHours(0, 0, 0, 0);
+    const weekCheckins = attempts.filter((a) => a.ts >= weekStart.getTime()).length;
+
+    const [plan] = await Promise.all([loadPlan()]);
+    const streak = plan ? computeStreak(plan.sessions) : 0;
+
+    const s   = weekCheckins === 1 ? '' : 's';
+    const msg = pickRandom(WEEKLY_SUMMARY);
+    const body = msg.body
+      .replace('{checkins}', String(weekCheckins))
+      .replace('{s}', s)
+      .replace('{streak}', String(streak));
+
+    // Cancel existing weekly summary before rescheduling
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    const existing  = scheduled.find((n) => n.identifier === WEEKLY_SUMMARY_ID);
+    if (existing) await Notifications.cancelScheduledNotificationAsync(WEEKLY_SUMMARY_ID);
+
+    await Notifications.scheduleNotificationAsync({
+      identifier: WEEKLY_SUMMARY_ID,
+      content: { title: msg.title, body, sound: true },
+      trigger: { date: next } as any,
+    });
+  } catch (e) {
+    if (__DEV__) console.warn('[NailExams] scheduleWeeklySummary failed', e); // eslint-disable-line no-console
   }
 }
