@@ -186,10 +186,10 @@ export default function SettingsScreen({ navigation }: Props) {
   const [topicCount, setTopicCount]     = useState(0);
   const [checkinCount, setCheckinCount] = useState(0);
   const [notifSettings, setNotifSettings] = useState<NotifSettings>({
-    reminderHour: 19, reminderMinute: 0, enabled: true,
+    extraEnabled: false, extraHour: 20, extraMinute: 0,
   });
   const [timePickerVisible, setTimePickerVisible] = useState(false);
-  const [draftHour, setDraftHour]     = useState(19);
+  const [draftHour, setDraftHour]     = useState(20);
   const [draftMinute, setDraftMinute] = useState(0);
 
   const loadStats = useCallback(async () => {
@@ -210,17 +210,25 @@ export default function SettingsScreen({ navigation }: Props) {
     return `${displayH}:${String(m).padStart(2, '0')} ${period}`;
   };
 
+  const toggleExtra = async () => {
+    const updated: NotifSettings = { ...notifSettings, extraEnabled: !notifSettings.extraEnabled };
+    await saveNotifSettings(updated);
+    setNotifSettings(updated);
+    void scheduleStudyReminder();
+  };
+
   const openTimePicker = () => {
-    setDraftHour(notifSettings.reminderHour);
-    setDraftMinute(notifSettings.reminderMinute);
+    setDraftHour(notifSettings.extraHour);
+    setDraftMinute(notifSettings.extraMinute);
     setTimePickerVisible(true);
   };
 
   const saveTime = async () => {
     const updated: NotifSettings = {
       ...notifSettings,
-      reminderHour: draftHour,
-      reminderMinute: draftMinute,
+      extraHour: draftHour,
+      extraMinute: draftMinute,
+      extraEnabled: true,
     };
     await saveNotifSettings(updated);
     setNotifSettings(updated);
@@ -395,13 +403,39 @@ export default function SettingsScreen({ navigation }: Props) {
           styles={styles}
         />
         <View style={styles.menuDivider} />
+        {/* Mandatory 6pm reminder — informational, always on */}
+        <View style={[styles.menuRow, { opacity: 0.6 }]} pointerEvents="none">
+          <View style={[styles.menuIcon, { backgroundColor: '#FEF9C3' }]}>
+            <Text style={styles.menuIconText}>🔔</Text>
+          </View>
+          <Text style={styles.menuLabel}>Daily reminder · 6:00 pm</Text>
+          <Text style={{ fontSize: 11, color: theme.colors.textMuted }}>Always on</Text>
+        </View>
+        <View style={styles.menuDivider} />
+        {/* Extra reminder — user-controlled */}
         <MenuRow
           icon="🔔"
-          iconBg="#FEF9C3"
-          label={`Reminder · ${formatTime(notifSettings.reminderHour, notifSettings.reminderMinute)}`}
-          onPress={openTimePicker}
+          iconBg="#EAF3DE"
+          label={notifSettings.extraEnabled
+            ? `Extra reminder · ${formatTime(notifSettings.extraHour, notifSettings.extraMinute)}`
+            : 'Extra reminder · Off'}
+          onPress={notifSettings.extraEnabled ? openTimePicker : toggleExtra}
           styles={styles}
         />
+        {notifSettings.extraEnabled && (
+          <>
+            <View style={styles.menuDivider} />
+            <Pressable
+              style={[styles.menuRow]}
+              onPress={toggleExtra}
+            >
+              <View style={{ width: 30 }} />
+              <Text style={[styles.menuLabel, { color: '#E24B4A', fontSize: 13 }]}>
+                Remove extra reminder
+              </Text>
+            </Pressable>
+          </>
+        )}
         <View style={styles.menuDivider} />
         <MenuRow
           icon="📆"
@@ -424,30 +458,6 @@ export default function SettingsScreen({ navigation }: Props) {
           iconBg="#F3E8FF"
           label="Theme"
           onPress={() => navigation.navigate('ThemeSelector')}
-          styles={styles}
-        />
-      </View>
-
-      {/* ── Account section ── */}
-      <Text style={styles.sectionLabel}>Account</Text>
-      <View style={styles.menuGroup}>
-        <MenuRow
-          icon="🚪"
-          iconBg="#FBEAF0"
-          label="Log out"
-          destructive
-          showChevron={false}
-          onPress={onLogout}
-          styles={styles}
-        />
-        <View style={styles.menuDivider} />
-        <MenuRow
-          icon="🗑️"
-          iconBg="#FCEBEB"
-          label="Delete account"
-          destructive
-          showChevron={false}
-          onPress={onDeleteAccount}
           styles={styles}
         />
       </View>
@@ -480,6 +490,30 @@ export default function SettingsScreen({ navigation }: Props) {
         </>
       )}
 
+      {/* ── Account section ── */}
+      <Text style={styles.sectionLabel}>Account</Text>
+      <View style={styles.menuGroup}>
+        <MenuRow
+          icon="🚪"
+          iconBg="#FBEAF0"
+          label="Log out"
+          destructive
+          showChevron={false}
+          onPress={onLogout}
+          styles={styles}
+        />
+        <View style={styles.menuDivider} />
+        <MenuRow
+          icon="🗑️"
+          iconBg="#FCEBEB"
+          label="Delete account"
+          destructive
+          showChevron={false}
+          onPress={onDeleteAccount}
+          styles={styles}
+        />
+      </View>
+
       <Text style={styles.versionText}>NailExams · v1.0</Text>
     </ScrollView>
 
@@ -502,8 +536,11 @@ export default function SettingsScreen({ navigation }: Props) {
           }}
           onPress={() => {}}
         >
-          <Text style={{ fontSize: 16, fontWeight: '600', color: theme.colors.textPrimary, marginBottom: 20 }}>
-            Daily reminder time
+          <Text style={{ fontSize: 16, fontWeight: '600', color: theme.colors.textPrimary, marginBottom: 4 }}>
+            Extra reminder time
+          </Text>
+          <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginBottom: 20 }}>
+            Added on top of the mandatory 6:00 pm reminder.
           </Text>
 
           {/* Hour picker */}
@@ -566,7 +603,7 @@ export default function SettingsScreen({ navigation }: Props) {
             }}
           >
             <Text style={{ fontSize: 15, fontWeight: '600', color: theme.colors.buttonPrimaryText }}>
-              Set reminder for {formatTime(draftHour, draftMinute)}
+              Set extra reminder for {formatTime(draftHour, draftMinute)}
             </Text>
           </Pressable>
         </Pressable>

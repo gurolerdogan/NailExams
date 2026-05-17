@@ -40,7 +40,7 @@ export default function SignUpScreen({ navigation }: Props) {
       setBusy(true);
       await signUp(email.trim(), password);
       await logEvent('signup_success', {});
-      navigation.popToTop();
+      // Auth state change handles navigation automatically — no manual pop needed
     } catch (e) {
       Alert.alert('Sign up failed', mapError(e));
     } finally {
@@ -140,7 +140,7 @@ export default function SignUpScreen({ navigation }: Props) {
               </>
             )}
 
-            <Pressable style={{ alignItems: 'center', paddingVertical: 4 }} onPress={() => !busy && navigation.popToTop()}>
+            <Pressable style={{ alignItems: 'center', paddingVertical: 4 }} onPress={() => !busy && navigation.navigate('Login')}>
               <Text style={{ fontSize: 13, color: T.textMuted }}>← Already have an account? Sign in</Text>
             </Pressable>
           </View>

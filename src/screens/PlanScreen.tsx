@@ -1,24 +1,23 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
-  Animated,
-  FlatList,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { Ionicons } from '@expo/vector-icons';
 
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import type { Topic } from '../types/models';
 import type { WeeklyPlan } from '../types/plan';
-import { loadPlan, savePlan, clearPlan } from '../services/storage/planStorage';
+import { loadPlan, clearPlan } from '../services/storage/planStorage';
 import { loadTopics } from '../services/storage/nailexamsStorage';
-import { now } from '../utils/time';
 import { computeStreak } from '../utils/streak';
 import { logEvent } from '../services/logging/logEvent';
 import type { AppTabParamList } from '../navigation/TabNavigator';
@@ -168,6 +167,39 @@ function createStyles(theme: Theme) {
       padding: 20,
     },
 
+    sessionDayHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderBottomWidth: 0.5,
+      borderBottomColor: theme.colors.divider,
+      backgroundColor: theme.colors.screenBg,
+    },
+    sessionDayHeaderDone: {
+      backgroundColor: '#DCFCE7',
+      borderBottomColor: '#BBF7D0',
+    },
+    sessionDayHeaderDot: {
+      width: 7,
+      height: 7,
+      borderRadius: 3.5,
+      backgroundColor: theme.colors.cardBorder,
+      flexShrink: 0,
+    },
+    sessionDayHeaderDotToday: { backgroundColor: theme.colors.accent },
+    sessionDayHeaderText: {
+      flex: 1,
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.colors.textSecondary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.4,
+    },
+    sessionDayHeaderTextToday: { color: theme.colors.accent },
+    sessionDayHeaderTextDone: { color: '#166534' },
+
     sessionCard: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -220,7 +252,6 @@ export default function PlanScreen() {
 
   const [plan, setPlan]       = useState<WeeklyPlan | null>(null);
   const [topics, setTopics]   = useState<Topic[]>([]);
-  const [busy, setBusy]       = useState(false);
 
   // Calendar state
   const today = useMemo(() => new Date(), []);
@@ -319,31 +350,33 @@ export default function PlanScreen() {
     ]);
   };
 
-  const markDone = useCallback(async (sessionId: string) => {
-    if (!plan || busy) return;
+  const shareDayProgress = useCallback(async (
+    dayLabel: string,
+    sessions: WeeklyPlan['sessions'],
+    topicConf: Map<string, number>,
+  ) => {
+    const lines = [
+      `✅ All done for ${dayLabel}!`,
+      '',
+      ...sessions.map((s) => {
+        const conf = topicConf.get(s.topicId) ?? 0;
+        const stars = conf > 0 ? ` · ${'⭐'.repeat(conf)}` : '';
+        return `• ${s.title}${stars}`;
+      }),
+      '',
+      'Tracked with NailExams 📚',
+    ];
     try {
-      setBusy(true);
-      const ts = now();
-      const next: WeeklyPlan = {
-        ...plan,
-        updatedAt: ts,
-        sessions: plan.sessions.map((s) =>
-          s.id === sessionId ? { ...s, status: 'DONE', updatedAt: ts } : s,
-        ),
-      };
-      await savePlan(next);
-      setPlan(next);
-      await logEvent('plan_session_done', { sessionId });
-    } finally {
-      setBusy(false);
-    }
-  }, [plan, busy]);
+      await Share.share({ message: lines.join('\n') });
+    } catch { /* dismissed */ }
+  }, []);
 
   // Deep-link session → Practice
   const openPractice = useCallback((session: WeeklyPlan['sessions'][number]) => {
     tabNav.navigate('Practice', {
       subjectId: session.subjectId,
       topicId: session.topicId,
+      returnTo: 'Plan',
     });
   }, [tabNav]);
 
@@ -499,56 +532,105 @@ export default function PlanScreen() {
         {weekSessions.length === 0 ? (
           <Text style={styles.emptyWeek}>No sessions for this week.</Text>
         ) : (
-          weekSessions.map((session) => {
-            const done = session.status === 'DONE';
-            const paletteIdx = subjectPaletteIdx.get(session.subjectId) ?? 0;
-            const palette = TILE_PALETTE[paletteIdx];
-            const sessionDate = isoToDate(session.date);
-            const dayLabel = sessionDate.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
-            const conf = topicConfidence.get(session.topicId) ?? 0;
-            const checkedIn = conf > 0;
+          (() => {
+            // Group sessions by date
+            const byDate = new Map<string, typeof weekSessions>();
+            for (const s of weekSessions) {
+              const arr = byDate.get(s.date) ?? [];
+              arr.push(s);
+              byDate.set(s.date, arr);
+            }
+            const todayISO = toISODate(new Date());
 
-            return (
-              <Pressable
-                key={session.id}
-                style={styles.sessionCard}
-                onPress={() => !done && openPractice(session)}
-              >
-                {/* Subject colour indicator */}
-                <View style={[styles.sessionIconWrap, { backgroundColor: palette.bg }]}>
-                  <View style={[styles.sessionIconDot, { backgroundColor: palette.text }]} />
-                </View>
+            return Array.from(byDate.entries()).map(([date, sessions]) => {
+              const d = isoToDate(date);
+              const isToday = date === todayISO;
+              const dayLabel = d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' });
+              const allDone = sessions.every((s) => (topicConfidence.get(s.topicId) ?? 0) > 0);
 
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.sessionTitle} numberOfLines={2}>{session.title}</Text>
-                  <View style={styles.sessionMetaRow}>
-                    <Text style={styles.sessionMeta}>{dayLabel}</Text>
-                    {checkedIn && (
-                      <>
-                        <View style={[styles.confDot, { backgroundColor: CONF_COLORS[conf - 1] }]} />
-                        <Text style={[styles.confLabel, { color: CONF_COLORS[conf - 1] }]}>
-                          {conf}/5
+              return (
+                <View key={date}>
+                  {/* Day header — green when all topics checked in */}
+                  <View style={[styles.sessionDayHeader, allDone && styles.sessionDayHeaderDone]}>
+                    <Text style={{ fontSize: allDone ? 13 : 7, flexShrink: 0 }}>
+                      {allDone ? '✅' : ''}
+                    </Text>
+                    {!allDone && (
+                      <View style={[styles.sessionDayHeaderDot, isToday && styles.sessionDayHeaderDotToday]} />
+                    )}
+                    <Text style={[
+                      styles.sessionDayHeaderText,
+                      isToday && !allDone && styles.sessionDayHeaderTextToday,
+                      allDone && styles.sessionDayHeaderTextDone,
+                    ]}>
+                      {allDone
+                        ? `${isToday ? 'Today · ' : ''}${dayLabel} — All done!`
+                        : isToday ? `Today · ${dayLabel}` : dayLabel}
+                    </Text>
+                    {allDone && (
+                      <Pressable
+                        onPress={() => void shareDayProgress(dayLabel, sessions, topicConfidence)}
+                        style={{
+                          flexDirection: 'row', alignItems: 'center', gap: 4,
+                          backgroundColor: '#BBF7D0', borderRadius: 8,
+                          paddingHorizontal: 8, paddingVertical: 3,
+                        }}
+                        hitSlop={8}
+                      >
+                        <Ionicons name="share-outline" size={12} color="#166534" />
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: '#166534' }}>
+                          Share
                         </Text>
-                      </>
+                      </Pressable>
                     )}
                   </View>
-                </View>
 
-                {done ? (
-                  <View style={styles.badgeDone}>
-                    <Text style={styles.badgeDoneText}>Done</Text>
-                  </View>
-                ) : (
-                  <Pressable
-                    style={styles.startBtn}
-                    onPress={() => openPractice(session)}
-                  >
-                    <Text style={styles.startBtnText}>{checkedIn ? 'Mark again' : 'Start →'}</Text>
-                  </Pressable>
-                )}
-              </Pressable>
-            );
-          })
+                  {/* Sessions for this day */}
+                  {sessions.map((session) => {
+                    const done = session.status === 'DONE';
+                    const paletteIdx = subjectPaletteIdx.get(session.subjectId) ?? 0;
+                    const palette = TILE_PALETTE[paletteIdx];
+                    const conf = topicConfidence.get(session.topicId) ?? 0;
+                    const checkedIn = conf > 0;
+
+                    return (
+                      <Pressable
+                        key={session.id}
+                        style={styles.sessionCard}
+                        onPress={() => !done && openPractice(session)}
+                      >
+                        <View style={[styles.sessionIconWrap, { backgroundColor: palette.bg }]}>
+                          <View style={[styles.sessionIconDot, { backgroundColor: palette.text }]} />
+                        </View>
+
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.sessionTitle} numberOfLines={2}>{session.title}</Text>
+                          {checkedIn && (
+                            <View style={styles.sessionMetaRow}>
+                              <View style={[styles.confDot, { backgroundColor: CONF_COLORS[conf - 1] }]} />
+                              <Text style={[styles.confLabel, { color: CONF_COLORS[conf - 1] }]}>
+                                {conf}/5
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+
+                        {done ? (
+                          <View style={styles.badgeDone}>
+                            <Text style={styles.badgeDoneText}>Done</Text>
+                          </View>
+                        ) : (
+                          <Pressable style={styles.startBtn} onPress={() => openPractice(session)}>
+                            <Text style={styles.startBtnText}>{checkedIn ? 'Mark again' : 'Start →'}</Text>
+                          </Pressable>
+                        )}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              );
+            });
+          })()
         )}
       </View>
     );

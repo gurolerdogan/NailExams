@@ -12,7 +12,7 @@ import { useTheme } from '../context/ThemeContext';
 
 export type AppTabParamList = {
   Home: undefined;
-  Practice: { subjectId?: string; topicId?: string } | undefined;
+  Practice: { subjectId?: string; topicId?: string; returnTo?: 'Plan' | 'Home' } | undefined;
   Plan: undefined;
   Settings: NavigatorScreenParams<SettingsStackParamList> | undefined;
 };

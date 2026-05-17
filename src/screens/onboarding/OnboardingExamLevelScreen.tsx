@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import type { OnboardingStackParamList } from '../../navigation/OnboardingNavigator';
@@ -7,9 +7,23 @@ import type { ExamLevel } from '../../types/models';
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, 'OnboardingExamLevel'>;
 
-const LEVELS: { label: string; value: ExamLevel; age: string; badge?: string }[] = [
-  { label: 'GCSE', value: 'GCSE', age: 'Ages 14–16 · Year 10 & 11', badge: 'Most popular' },
-  { label: 'A Level', value: 'A_LEVEL', age: 'Ages 16–18 · Year 12 & 13' },
+const LEVELS: { label: string; value: ExamLevel; age: string; subjects: string; topics: string; desc: string }[] = [
+  {
+    label: 'GCSE',
+    value: 'GCSE',
+    age: 'Ages 14–16 · Year 10 & 11',
+    subjects: '61 subjects',
+    topics: '1,200+ revision topics',
+    desc: 'AQA · Edexcel · OCR — Maths, Sciences, English, Languages, Humanities and more',
+  },
+  {
+    label: 'A Level',
+    value: 'A_LEVEL',
+    age: 'Ages 16–18 · Year 12 & 13',
+    subjects: '74 subjects',
+    topics: '1,600+ revision topics',
+    desc: 'AQA · Edexcel · OCR — Sciences, Maths, Humanities, Languages, Social Sciences and more',
+  },
 ];
 
 export default function OnboardingExamLevelScreen({ navigation }: Props) {
@@ -26,9 +40,11 @@ export default function OnboardingExamLevelScreen({ navigation }: Props) {
 
         {/* Hero */}
         <View style={styles.hero}>
-          <View style={styles.logoMark}>
-            <Text style={styles.logoMarkText}>✦</Text>
-          </View>
+          <Image
+            source={require('../../../assets/icon.png')}
+            style={styles.logo}
+            resizeMode="cover"
+          />
           <Text style={styles.title}>Welcome to NailExams</Text>
           <Text style={styles.subtitle}>
             Let's get your revision set up.{'\n'}What are you studying for?
@@ -64,11 +80,19 @@ export default function OnboardingExamLevelScreen({ navigation }: Props) {
                     {isSelected && <View style={styles.radioDot} />}
                   </View>
                 </View>
-                {level.badge && (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>{level.badge}</Text>
+
+                <View style={styles.cardDivider} />
+
+                <Text style={styles.cardDesc}>{level.desc}</Text>
+
+                <View style={styles.statsRow}>
+                  <View style={styles.statPill}>
+                    <Text style={styles.statPillText}>📚 {level.subjects}</Text>
                   </View>
-                )}
+                  <View style={styles.statPill}>
+                    <Text style={styles.statPillText}>🎯 {level.topics}</Text>
+                  </View>
+                </View>
               </Pressable>
             );
           })}
@@ -94,16 +118,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 20 },
 
   hero: { alignItems: 'center', paddingTop: 40, paddingBottom: 28 },
-  logoMark: {
-    width: 58,
-    height: 58,
+  logo: {
+    width: 72,
+    height: 72,
     borderRadius: 18,
-    backgroundColor: '#1C1C1E',
-    alignItems: 'center',
-    justifyContent: 'center',
     marginBottom: 18,
   },
-  logoMarkText: { fontSize: 26, color: '#FFF' },
   title: { fontSize: 22, fontWeight: '700', color: '#1C1C1E', marginBottom: 8, textAlign: 'center' },
   subtitle: { fontSize: 14, color: '#888', textAlign: 'center', lineHeight: 21 },
 
@@ -135,15 +155,16 @@ const styles = StyleSheet.create({
   },
   radioSelected: { borderColor: '#1C1C1E', backgroundColor: '#1C1C1E' },
   radioDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#FFF' },
-  badge: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#EAF3DE',
-    borderRadius: 20,
+  cardDivider: { height: 0.5, backgroundColor: '#EBEBEB', marginVertical: 12 },
+  cardDesc: { fontSize: 12, color: '#888', lineHeight: 17, marginBottom: 10 },
+  statsRow: { flexDirection: 'row', gap: 8 },
+  statPill: {
+    backgroundColor: '#F4F4F6',
+    borderRadius: 8,
     paddingHorizontal: 10,
-    paddingVertical: 3,
-    marginTop: 8,
+    paddingVertical: 5,
   },
-  badgeText: { fontSize: 11, fontWeight: '600', color: '#27500A' },
+  statPillText: { fontSize: 12, fontWeight: '600', color: '#3C3C43' },
 
   footer: { position: 'absolute', bottom: 32, left: 20, right: 20 },
   nextBtn: {

@@ -13,7 +13,14 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { usePlus, FREE_SUBJECT_LIMIT } from '../context/PlusContext';
+import {
+  usePlus,
+  FREE_SUBJECT_LIMIT_GCSE,
+  FREE_SUBJECT_LIMIT_ALEVEL,
+  MAX_SUBJECTS_GCSE,
+  MAX_SUBJECTS_ALEVEL,
+  WARN_SUBJECTS_GCSE,
+} from '../context/PlusContext';
 import type { ExamLevel, Subject } from '../types/models';
 import { saveSubjects } from '../services/storage/nailexamsStorage';
 import { loadPlan } from '../services/storage/planStorage';
@@ -189,11 +196,40 @@ export default function EditSubjectsScreen({ navigation }: Props) {
     );
   }
 
+  const isGCSE    = level === 'GCSE';
+  const freeLimit = isGCSE ? FREE_SUBJECT_LIMIT_GCSE   : FREE_SUBJECT_LIMIT_ALEVEL;
+  const hardCap   = isGCSE ? MAX_SUBJECTS_GCSE          : MAX_SUBJECTS_ALEVEL;
+
   const toggle = (name: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
+      if (next.has(name)) {
+        next.delete(name);
+        return next;
+      }
+
+      // Hard cap
+      if (next.size >= hardCap) {
+        Alert.alert(
+          `Maximum ${hardCap} subjects`,
+          isGCSE
+            ? `You can't add more than ${hardCap} GCSE subjects.`
+            : `A Level students typically take up to ${hardCap} subjects.`,
+          [{ text: 'OK' }],
+        );
+        return prev;
+      }
+
+      // GCSE soft warning at 12
+      if (isGCSE && next.size + 1 === WARN_SUBJECTS_GCSE) {
+        Alert.alert(
+          'That\'s a lot of subjects!',
+          `Most students study 8–12 GCSEs. Selecting more than ${WARN_SUBJECTS_GCSE} is highly unusual — make sure these are all exams you're actually sitting.`,
+          [{ text: 'Got it' }],
+        );
+      }
+
+      next.add(name);
       return next;
     });
   };
@@ -214,10 +250,12 @@ export default function EditSubjectsScreen({ navigation }: Props) {
       Alert.alert('Select at least 1 subject');
       return;
     }
-    if (!isPlus && selected.size > FREE_SUBJECT_LIMIT) {
+    if (!isPlus && selected.size > freeLimit) {
       Alert.alert(
         'Plus required',
-        `Free accounts are limited to ${FREE_SUBJECT_LIMIT} subjects. Upgrade to NailExams Plus for unlimited subjects.`,
+        isGCSE
+          ? `Free accounts are limited to ${freeLimit} subjects. Upgrade to NailExams Plus for unlimited subjects.`
+          : `Free accounts can track 1 A Level subject. Upgrade to Plus to add more.`,
         [
           { text: 'Not now', style: 'cancel' },
           { text: 'Upgrade', onPress: () => navigation.navigate('Paywall') },

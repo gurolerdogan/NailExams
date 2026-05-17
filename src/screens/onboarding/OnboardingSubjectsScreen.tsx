@@ -6,39 +6,63 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import type { OnboardingStackParamList } from '../../navigation/OnboardingNavigator';
 import type { ExamLevel } from '../../types/models';
-import { GCSE_SUBJECT_PRESETS, ALEVEL_SUBJECT_PRESETS } from '../../data/gcseTopicCatalog';
+import {
+  GCSE_SUBJECT_GROUPS,
+  ALEVEL_SUBJECT_GROUPS,
+} from '../../data/gcseTopicCatalog';
 import { TILE_PALETTE } from '../../constants/palette';
-import { usePlus, FREE_SUBJECT_LIMIT } from '../../context/PlusContext';
+import {
+  usePlus,
+  FREE_SUBJECT_LIMIT_GCSE,
+  FREE_SUBJECT_LIMIT_ALEVEL,
+  MAX_SUBJECTS_GCSE,
+  MAX_SUBJECTS_ALEVEL,
+  WARN_SUBJECTS_GCSE,
+} from '../../context/PlusContext';
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, 'OnboardingSubjects'>;
 
-type PresetMap = Record<ExamLevel, string[]>;
-
-const PRESET_SUBJECTS: PresetMap = {
-  GCSE: GCSE_SUBJECT_PRESETS,
-  A_LEVEL: ALEVEL_SUBJECT_PRESETS,
+// Provider accent colours for section headers
+const PROVIDER_COLORS: Record<string, { bg: string; text: string }> = {
+  AQA:     { bg: '#E6F1FB', text: '#0C447C' },
+  Edexcel: { bg: '#EAF3DE', text: '#27500A' },
+  OCR:     { bg: '#EEEDFE', text: '#3C3489' },
 };
+const DEFAULT_PROVIDER_COLOR = { bg: '#F4F4F6', text: '#3C3C43' };
 
 export default function OnboardingSubjectsScreen({ navigation, route }: Props) {
   const { examLevel } = route.params;
   const { isPlus } = usePlus();
-  const presets = PRESET_SUBJECTS[examLevel];
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [customInput, setCustomInput] = useState('');
-  const [customExtras, setCustomExtras] = useState<string[]>([]);
+  const isGCSE = examLevel === 'GCSE';
 
-  const allOptions = useMemo(
-    () => [...presets, ...customExtras],
-    [presets, customExtras],
+  const activeGroups = isGCSE ? GCSE_SUBJECT_GROUPS : ALEVEL_SUBJECT_GROUPS;
+
+  const [expandedProviders, setExpandedProviders] = useState<Set<string>>(
+    () => new Set(activeGroups.map((g) => g.provider)),
   );
+
+  // Palette index across all subjects for consistent colouring
+  const allSubjectNames = useMemo(
+    () => activeGroups.flatMap((g) => g.subjects),
+    [activeGroups],
+  );
+
+  const paletteIndexOf = useMemo(() => {
+    const map = new Map<string, number>();
+    allSubjectNames.forEach((name, i) => map.set(name, i));
+    return map;
+  }, [allSubjectNames]);
+
+  const freeLimit = isGCSE ? FREE_SUBJECT_LIMIT_GCSE : FREE_SUBJECT_LIMIT_ALEVEL;
+  const hardCap   = isGCSE ? MAX_SUBJECTS_GCSE : MAX_SUBJECTS_ALEVEL;
 
   const toggle = (name: string) => {
     setSelected((prev) => {
@@ -47,28 +71,43 @@ export default function OnboardingSubjectsScreen({ navigation, route }: Props) {
         next.delete(name);
         return next;
       }
-      // Gate: free users limited to FREE_SUBJECT_LIMIT subjects
-      if (!isPlus && next.size >= FREE_SUBJECT_LIMIT) {
+
+      // Hard cap (all users)
+      if (next.size >= hardCap) {
         Alert.alert(
-          `Free plan: up to ${FREE_SUBJECT_LIMIT} subjects`,
-          `You've selected ${FREE_SUBJECT_LIMIT} subjects. Upgrade to NailExams Plus for unlimited subjects — you can do this from Settings after setup.`,
+          `Maximum ${hardCap} subjects`,
+          isGCSE
+            ? `You can't add more than ${hardCap} GCSE subjects.`
+            : `A Level students typically take up to ${hardCap} subjects.`,
           [{ text: 'OK' }],
         );
         return prev;
       }
+
+      // Soft warning at 12 for GCSE
+      if (isGCSE && next.size + 1 === WARN_SUBJECTS_GCSE) {
+        Alert.alert(
+          'That\'s a lot of subjects!',
+          `Most students study 8–12 GCSEs. Selecting more than ${WARN_SUBJECTS_GCSE} is highly unusual — make sure these are all exams you're actually sitting.`,
+          [{ text: 'Got it' }],
+        );
+      }
+
+      // Plus gate (free limit)
+      if (!isPlus && next.size >= freeLimit) {
+        Alert.alert(
+          isGCSE ? `Free plan: up to ${freeLimit} subjects` : 'Plus required',
+          isGCSE
+            ? `Upgrade to NailExams Plus for unlimited subjects — you can do this from Settings after setup.`
+            : `A Level students on the free plan can track 1 subject. Upgrade to Plus to add more.`,
+          [{ text: 'OK' }],
+        );
+        return prev;
+      }
+
       next.add(name);
       return next;
     });
-  };
-
-  const addCustom = () => {
-    const trimmed = customInput.trim();
-    if (!trimmed) return;
-    if (!allOptions.find((s) => s.toLowerCase() === trimmed.toLowerCase())) {
-      setCustomExtras((prev) => [...prev, trimmed]);
-    }
-    setSelected((prev) => new Set([...prev, trimmed]));
-    setCustomInput('');
   };
 
   const onNext = () => {
@@ -82,6 +121,79 @@ export default function OnboardingSubjectsScreen({ navigation, route }: Props) {
     });
   };
 
+  const toggleProvider = (provider: string) => {
+    setExpandedProviders((prev) => {
+      const next = new Set(prev);
+      if (next.has(provider)) next.delete(provider);
+      else next.add(provider);
+      return next;
+    });
+  };
+
+  // ── Render: grouped GCSE ──────────────────────────────────────────────────────
+  const renderGCSE = () => (
+    <>
+      {GCSE_SUBJECT_GROUPS.map((group) => {
+        const expanded = expandedProviders.has(group.provider);
+        const providerColor = PROVIDER_COLORS[group.provider] ?? DEFAULT_PROVIDER_COLOR;
+        const selectedInGroup = group.subjects.filter((s) => selected.has(s)).length;
+
+        return (
+          <View key={group.provider} style={styles.providerSection}>
+            {/* Provider header */}
+            <Pressable
+              style={[styles.providerHeader, { backgroundColor: providerColor.bg }]}
+              onPress={() => toggleProvider(group.provider)}
+            >
+              <Text style={[styles.providerName, { color: providerColor.text }]}>
+                {group.provider}
+              </Text>
+              {selectedInGroup > 0 && (
+                <View style={[styles.providerBadge, { backgroundColor: providerColor.text }]}>
+                  <Text style={styles.providerBadgeText}>{selectedInGroup}</Text>
+                </View>
+              )}
+              <Text style={[styles.providerChevron, { color: providerColor.text }]}>
+                {expanded ? '▾' : '▸'}
+              </Text>
+            </Pressable>
+
+            {/* Subject tiles */}
+            {expanded && (
+              <View style={styles.grid}>
+                {group.subjects.map((name) => {
+                  const isSelected = selected.has(name);
+                  const idx = paletteIndexOf.get(name) ?? 0;
+                  const palette = TILE_PALETTE[idx % TILE_PALETTE.length];
+                  return (
+                    <Pressable
+                      key={name}
+                      style={[
+                        styles.tile,
+                        { backgroundColor: palette.bg },
+                        isSelected && styles.tileSelected,
+                      ]}
+                      onPress={() => toggle(name)}
+                    >
+                      <View style={[styles.indicator, isSelected && styles.indicatorSelected]}>
+                        {isSelected && <View style={styles.indicatorDot} />}
+                      </View>
+                      <Text style={[styles.tileName, { color: palette.text }]} numberOfLines={2}>
+                        {/* Strip provider prefix for display since header shows it */}
+                        {name.replace(/^(AQA|Edexcel|OCR)\s+/, '')}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+        );
+      })}
+    </>
+  );
+
+
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView
@@ -93,80 +205,34 @@ export default function OnboardingSubjectsScreen({ navigation, route }: Props) {
         <View style={styles.header}>
           <Text style={styles.title}>Pick your subjects</Text>
           <Text style={styles.subtitle}>
-            {examLevel === 'GCSE' ? 'GCSE' : 'A Level'} · tap to select
+            {examLevel === 'GCSE' ? 'GCSE' : 'A Level'} · tap a provider to expand
           </Text>
         </View>
 
-        {/* Step dots */}
-        {/* Step dots — step 2 of 4 */}
+        {/* Step dots — step 2 of 3 */}
         <View style={styles.dots}>
           <View style={styles.dot} />
           <View style={[styles.dot, styles.dotActive]} />
           <View style={styles.dot} />
-          <View style={styles.dot} />
         </View>
 
-        {/* Tile grid */}
-        <View style={styles.grid}>
-          {allOptions.map((name, idx) => {
-            const isSelected = selected.has(name);
-            const palette = TILE_PALETTE[idx % TILE_PALETTE.length];
-            return (
-              <Pressable
-                key={name}
-                style={[
-                  styles.tile,
-                  { backgroundColor: palette.bg },
-                  isSelected && styles.tileSelected,
-                ]}
-                onPress={() => toggle(name)}
-              >
-                <View style={[styles.indicator, isSelected && styles.indicatorSelected]}>
-                  {isSelected && <View style={styles.indicatorDot} />}
-                </View>
-                <Text style={[styles.tileName, { color: palette.text }]} numberOfLines={2}>
-                  {name}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        {renderGCSE()}
 
-        {/* Custom subject */}
-        <View style={styles.customSection}>
-          <Text style={styles.customLabel}>Add custom subject</Text>
-          <View style={styles.customRow}>
-            <TextInput
-              style={styles.customInput}
-              value={customInput}
-              onChangeText={setCustomInput}
-              placeholder="e.g. Psychology"
-              placeholderTextColor="#AAA"
-              autoCapitalize="words"
-              onSubmitEditing={addCustom}
-              returnKeyType="done"
-            />
-            <Pressable
-              style={[styles.addBtn, !customInput.trim() && { opacity: 0.4 }]}
-              onPress={addCustom}
-              disabled={!customInput.trim()}
-            >
-              <Text style={styles.addBtnText}>Add</Text>
-            </Pressable>
-          </View>
-        </View>
-
-        {/* spacer so content clears the footer */}
         <View style={{ height: 100 }} />
       </ScrollView>
 
       {/* Sticky footer */}
       <View style={styles.footer}>
         {!isPlus && (
-          <Text style={{ textAlign: 'center', fontSize: 12, color: '#888', marginBottom: 8 }}>
-            {selected.size >= FREE_SUBJECT_LIMIT
-              ? `${FREE_SUBJECT_LIMIT}/${FREE_SUBJECT_LIMIT} subjects selected · upgrade for unlimited ✦`
-              : `Free plan · ${FREE_SUBJECT_LIMIT - selected.size} subject slot${FREE_SUBJECT_LIMIT - selected.size !== 1 ? 's' : ''} remaining`}
+          <Text style={styles.limitHint}>
+            {selected.size >= freeLimit
+              ? `${freeLimit} subject${freeLimit !== 1 ? 's' : ''} selected · upgrade for more ✦`
+              : `Free plan · ${freeLimit - selected.size} slot${freeLimit - selected.size !== 1 ? 's' : ''} remaining`}
+          </Text>
+        )}
+        {isGCSE && selected.size >= WARN_SUBJECTS_GCSE && (
+          <Text style={[styles.limitHint, { color: '#EF9F27' }]}>
+            ⚠️ {selected.size} subjects selected — that's a lot for one student
           </Text>
         )}
         <Pressable
@@ -175,7 +241,9 @@ export default function OnboardingSubjectsScreen({ navigation, route }: Props) {
           disabled={selected.size === 0}
         >
           <Text style={styles.nextBtnText}>
-            {selected.size > 0 ? `Continue with ${selected.size} subject${selected.size !== 1 ? 's' : ''} →` : 'Continue →'}
+            {selected.size > 0
+              ? `Continue with ${selected.size} subject${selected.size !== 1 ? 's' : ''} →`
+              : 'Continue →'}
           </Text>
         </Pressable>
       </View>
@@ -186,86 +254,71 @@ export default function OnboardingSubjectsScreen({ navigation, route }: Props) {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#FFFFFF' },
   scroll: { flex: 1 },
-  content: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16 },
+  content: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 16 },
 
   header: { marginBottom: 16 },
   title: { fontSize: 22, fontWeight: '700', color: '#1C1C1E', marginBottom: 4 },
   subtitle: { fontSize: 13, color: '#888' },
 
-  dots: { flexDirection: 'row', gap: 6, marginBottom: 24 },
+  dots: { flexDirection: 'row', gap: 6, marginBottom: 20 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#E0E0E0' },
   dotActive: { width: 20, backgroundColor: '#1C1C1E', borderRadius: 3 },
 
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 4 },
+  // Provider groups
+  providerSection: { marginBottom: 10 },
+  providerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  providerName: { fontSize: 13, fontWeight: '700', flex: 1, letterSpacing: 0.3 },
+  providerBadge: {
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  providerBadgeText: { fontSize: 11, fontWeight: '700', color: '#FFF' },
+  providerChevron: { fontSize: 13, fontWeight: '600' },
+
+  // Tile grid
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
   tile: {
     width: '30.5%',
-    borderRadius: 16,
+    borderRadius: 14,
     padding: 10,
     paddingBottom: 12,
     alignItems: 'center',
     borderWidth: 2,
     borderColor: 'transparent',
-    minHeight: 80,
+    minHeight: 76,
     justifyContent: 'flex-start',
     gap: 6,
   },
   tileSelected: { borderColor: '#1C1C1E' },
   indicator: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 1.5,
-    borderColor: '#CCC',
-    backgroundColor: '#FFF',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 18, height: 18, borderRadius: 9, borderWidth: 1.5,
+    borderColor: '#CCC', backgroundColor: '#FFF',
+    alignItems: 'center', justifyContent: 'center',
   },
   indicatorSelected: { borderColor: '#1C1C1E', backgroundColor: '#1C1C1E' },
   indicatorDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#FFF' },
-  tileName: { fontSize: 11, fontWeight: '600', textAlign: 'center', lineHeight: 15 },
+  tileName: { fontSize: 10, fontWeight: '600', textAlign: 'center', lineHeight: 14 },
 
-  customSection: { marginTop: 20 },
-  customLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#888',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 8,
-  },
-  customRow: { flexDirection: 'row', gap: 8 },
-  customInput: {
-    flex: 1,
-    backgroundColor: '#F8F8F8',
-    borderRadius: 12,
-    borderWidth: 0.5,
-    borderColor: '#DDD',
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    fontSize: 14,
-    color: '#1C1C1E',
-  },
-  addBtn: {
-    backgroundColor: '#1C1C1E',
-    borderRadius: 12,
-    paddingHorizontal: 18,
-    justifyContent: 'center',
-  },
-  addBtnText: { color: '#FFF', fontSize: 14, fontWeight: '600' },
-
+  // Footer
   footer: {
-    paddingHorizontal: 20,
-    paddingBottom: 32,
-    paddingTop: 12,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 0.5,
-    borderTopColor: '#F0F0F0',
+    paddingHorizontal: 20, paddingBottom: 32, paddingTop: 12,
+    backgroundColor: '#FFFFFF', borderTopWidth: 0.5, borderTopColor: '#F0F0F0',
   },
+  limitHint: { textAlign: 'center', fontSize: 12, color: '#888', marginBottom: 8 },
   nextBtn: {
-    backgroundColor: '#1C1C1E',
-    borderRadius: 16,
-    paddingVertical: 16,
-    alignItems: 'center',
+    backgroundColor: '#1C1C1E', borderRadius: 16, paddingVertical: 16, alignItems: 'center',
   },
   nextBtnText: { color: '#FFF', fontSize: 15, fontWeight: '600' },
 });

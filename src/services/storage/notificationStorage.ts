@@ -2,23 +2,24 @@ import { getJson, setJson } from './storage';
 import { STORAGE_KEYS } from './keys';
 
 export type NotifSettings = {
-  reminderHour: number;   // 0–23
-  reminderMinute: number; // 0–59
-  enabled: boolean;
+  /** Extra reminder on top of the mandatory 6pm one. */
+  extraEnabled: boolean;
+  extraHour: number;    // 0–23
+  extraMinute: number;  // 0–59
 };
 
 const DEFAULT: NotifSettings = {
-  reminderHour: 19,   // 7 pm default
-  reminderMinute: 0,
-  enabled: true,
+  extraEnabled: false,
+  extraHour: 20,   // 8 pm default for extra
+  extraMinute: 0,
 };
 
 export async function loadNotifSettings(): Promise<NotifSettings> {
   const raw = await getJson<Partial<NotifSettings>>(STORAGE_KEYS.notifSettingsV1, {});
   return {
-    reminderHour: raw.reminderHour ?? DEFAULT.reminderHour,
-    reminderMinute: raw.reminderMinute ?? DEFAULT.reminderMinute,
-    enabled: raw.enabled ?? DEFAULT.enabled,
+    extraEnabled: raw.extraEnabled ?? DEFAULT.extraEnabled,
+    extraHour:    raw.extraHour    ?? DEFAULT.extraHour,
+    extraMinute:  raw.extraMinute  ?? DEFAULT.extraMinute,
   };
 }
 

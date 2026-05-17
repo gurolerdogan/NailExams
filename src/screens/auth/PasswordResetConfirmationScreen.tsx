@@ -18,7 +18,7 @@ export default function PasswordResetConfirmationScreen({ route, navigation }: P
       </Text>
       <Text style={styles.email}>{email}</Text>
 
-      <PrimaryButton title="Back to login" onPress={() => navigation.popToTop()} />
+      <PrimaryButton title="Back to login" onPress={() => navigation.navigate('Login')} />
     </View>
   );
 }

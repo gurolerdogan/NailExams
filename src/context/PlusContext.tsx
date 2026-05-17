@@ -19,8 +19,14 @@ import {
 // features can be tested during development.
 const PLUS_GATE_BYPASS = Constants.appOwnership === 'expo';
 
-// Free-tier limits
-export const FREE_SUBJECT_LIMIT = 3;
+// Subject limits per exam level
+export const FREE_SUBJECT_LIMIT        = 3;   // GCSE free (kept for back-compat)
+export const FREE_SUBJECT_LIMIT_GCSE   = 3;
+export const FREE_SUBJECT_LIMIT_ALEVEL = 1;
+
+export const MAX_SUBJECTS_GCSE         = 15;
+export const MAX_SUBJECTS_ALEVEL       = 5;
+export const WARN_SUBJECTS_GCSE        = 12;  // soft warning threshold
 
 type PlusState = {
   isPlus: boolean;
