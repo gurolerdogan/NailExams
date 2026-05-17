@@ -14,8 +14,8 @@ import type { Theme } from './types';
 // Add a new theme file and push it here — the Theme Selector picks it up automatically.
 export const THEME_REGISTRY: Theme[] = [
   defaultTheme,
-  teenEnergyTheme,
   softFocusTheme,
+  teenEnergyTheme,
   darkTerminalTheme,
 ];
 

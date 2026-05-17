@@ -48,7 +48,16 @@ export default function SettingsNavigator() {
         headerBackVisible: false,
         headerLeft: () => (
           <BackButton
-            onPress={navigation.goBack}
+            onPress={() => {
+              // If SettingsHome is not in the stack (e.g. navigated here from
+              // another tab), go back to SettingsHome explicitly rather than
+              // exiting the Settings tab entirely.
+              if (navigation.canGoBack()) {
+                navigation.goBack();
+              } else {
+                navigation.navigate('SettingsHome');
+              }
+            }}
             bg={theme.colors.headerBackBg}
             icon={theme.colors.headerBackIcon}
           />

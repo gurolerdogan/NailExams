@@ -3,6 +3,7 @@ import {
   FlatList,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   View,
@@ -221,9 +222,11 @@ function createStyles(theme: Theme) {
     },
     dayPillActive: { backgroundColor: theme.colors.buttonPrimaryBg, borderColor: theme.colors.buttonPrimaryBg },
     dayPillToday: { borderColor: '#185FA5', borderWidth: 1.5 },
+    dayPillDone: { backgroundColor: '#DCFCE7', borderColor: '#86EFAC' },
     dayText: { fontSize: 10, fontWeight: '500', color: theme.colors.textSecondary },
     dayNum: { fontSize: 13, fontWeight: '500', color: theme.colors.textPrimary },
     dayTextActive: { color: theme.colors.buttonPrimaryText },
+    dayTextDone: { color: '#166534' },
 
     sessionCard: {
       backgroundColor: theme.colors.cardBg,
@@ -312,6 +315,18 @@ export default function HomeScreen() {
   const avatarLetter = user?.email ? user.email[0].toUpperCase() : '?';
   const level        = profile?.examLevel ?? '—';
 
+  // Days remaining per subject (subjectId → days, only upcoming dates)
+  const examDaysMap = useMemo(() => {
+    const map = new Map<string, number>();
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    for (const e of profile?.examDates ?? []) {
+      const d = new Date(e.date + 'T00:00:00');
+      const days = Math.round((d.getTime() - today.getTime()) / 86400000);
+      if (days >= 0) map.set(e.subjectId, days);
+    }
+    return map;
+  }, [profile]);
+
   // Nearest upcoming exam date
   const nextExam = useMemo(() => {
     const dates = profile?.examDates ?? [];
@@ -385,6 +400,42 @@ export default function HomeScreen() {
     return map;
   }, [allTopics]);
 
+  const shareDayProgress = useCallback(async (dateISO: string) => {
+    const sessions = plan?.sessions.filter((s) => s.date === dateISO) ?? [];
+    const d = new Date(dateISO + 'T00:00:00');
+    const dayLabel = d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' });
+    const lines = [
+      `✅ All done for ${dayLabel}!`,
+      '',
+      ...sessions.map((s) => {
+        const conf = topicConfidenceMap.get(s.topicId) ?? 0;
+        const stars = conf > 0 ? ` · ${'⭐'.repeat(conf)}` : '';
+        return `• ${s.title}${stars}`;
+      }),
+      '',
+      'Tracked with NailExams 📚',
+    ];
+    try { await Share.share({ message: lines.join('\n') }); } catch { /* dismissed */ }
+  }, [plan, topicConfidenceMap]);
+
+  // Which dates have all their plan sessions' topics checked in
+  const daysAllDone = useMemo(() => {
+    if (!plan) return new Set<string>();
+    const done = new Set<string>();
+    const byDate = new Map<string, string[]>();
+    for (const s of plan.sessions) {
+      const arr = byDate.get(s.date) ?? [];
+      arr.push(s.topicId);
+      byDate.set(s.date, arr);
+    }
+    for (const [date, topicIds] of byDate) {
+      if (topicIds.every((id) => (topicConfidenceMap.get(id) ?? 0) > 0)) {
+        done.add(date);
+      }
+    }
+    return done;
+  }, [plan, topicConfidenceMap]);
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.appTitle}>NailExams</Text>
@@ -434,16 +485,30 @@ export default function HomeScreen() {
           backgroundColor: nextExam.days < 14 ? '#FCEBEB' : nextExam.days < 30 ? '#FAEEDA' : theme.colors.cardBg,
           borderRadius: 12, padding: 12, marginBottom: 14,
         }}>
-          <Text style={{ fontSize: 18 }}>📅</Text>
+          <Text style={{ fontSize: 20 }}>
+            {nextExam.days === 0 ? '🚨' : nextExam.days < 14 ? '⚠️' : '📅'}
+          </Text>
           <View style={{ flex: 1 }}>
             <Text style={{
-              fontSize: 13, fontWeight: '700',
+              fontSize: 14, fontWeight: '800', letterSpacing: -0.2,
               color: nextExam.days < 14 ? '#A32D2D' : nextExam.days < 30 ? '#633806' : theme.colors.textPrimary,
             }}>
-              {nextExam.days === 0 ? 'Today!' : `${nextExam.days}d`} · {nextExam.name}
+              {nextExam.days === 0
+                ? `${nextExam.name} is today!`
+                : nextExam.days === 1
+                  ? `1 day left to ${nextExam.name}!`
+                  : `${nextExam.days} days left to ${nextExam.name}!`}
             </Text>
-            <Text style={{ fontSize: 11, color: theme.colors.textMuted, marginTop: 1 }}>
-              {nextExam.days < 14 ? 'Almost there — keep checking in!' : nextExam.days < 30 ? 'Getting close — stay on track' : 'Exam coming up — you\'ve got this'}
+            <Text style={{ fontSize: 11, color: theme.colors.textMuted, marginTop: 2 }}>
+              {nextExam.days === 0
+                ? 'Good luck — you\'ve got this! 💪'
+                : nextExam.days < 7
+                  ? 'Final push — every check-in counts now.'
+                  : nextExam.days < 14
+                    ? 'Almost there — keep your revision going.'
+                    : nextExam.days < 30
+                      ? 'Getting close — stay on track and keep checking in.'
+                      : 'Plenty of time — build the habit now.'}
             </Text>
           </View>
         </View>
@@ -511,14 +576,31 @@ export default function HomeScreen() {
             /* ── TILE layout ── */
             <View style={styles.subjectGrid}>
               {subjects.map((s, idx) => {
-                const palette = TILE_PALETTE[idx % TILE_PALETTE.length];
-                const stats = subjectStats.get(s.id) ?? { bars: [0,0,0,0,0], checkedIn: 0, total: 0 };
+                const palette  = TILE_PALETTE[idx % TILE_PALETTE.length];
+                const stats    = subjectStats.get(s.id) ?? { bars: [0,0,0,0,0], checkedIn: 0, total: 0 };
+                const examDays = examDaysMap.get(s.id);
+                const examColor = examDays === undefined ? null
+                  : examDays < 14 ? '#E24B4A'
+                  : examDays < 30 ? '#EF9F27'
+                  : palette.text;
                 return (
                   <Pressable
                     key={s.id}
                     style={[styles.subjectTile, { backgroundColor: palette.bg }]}
                     onPress={() => tabNav.navigate('Practice', { subjectId: s.id, topicId: undefined })}
                   >
+                    {/* Exam countdown badge — top-right corner */}
+                    {examDays !== undefined && (
+                      <View style={{
+                        position: 'absolute', top: 7, right: 8,
+                        backgroundColor: examDays < 14 ? '#FCEBEB' : examDays < 30 ? '#FAEEDA' : 'rgba(0,0,0,0.06)',
+                        borderRadius: 6, paddingHorizontal: 5, paddingVertical: 2,
+                      }}>
+                        <Text style={{ fontSize: 9, fontWeight: '700', color: examColor! }}>
+                          {examDays === 0 ? 'Today' : `${examDays}d`}
+                        </Text>
+                      </View>
+                    )}
                     <Text style={[styles.tileName, { color: palette.text }]} numberOfLines={2}>
                       {s.name}
                     </Text>
@@ -543,9 +625,14 @@ export default function HomeScreen() {
             /* ── LIST layout ── */
             <View style={styles.subjectList}>
               {subjects.map((s, idx) => {
-                const palette = TILE_PALETTE[idx % TILE_PALETTE.length];
-                const stats = subjectStats.get(s.id) ?? { bars: [0,0,0,0,0], checkedIn: 0, total: 0 };
-                const isLast = idx === subjects.length - 1;
+                const palette  = TILE_PALETTE[idx % TILE_PALETTE.length];
+                const stats    = subjectStats.get(s.id) ?? { bars: [0,0,0,0,0], checkedIn: 0, total: 0 };
+                const isLast   = idx === subjects.length - 1;
+                const examDays = examDaysMap.get(s.id);
+                const examColor = examDays === undefined ? null
+                  : examDays < 14 ? '#E24B4A'
+                  : examDays < 30 ? '#EF9F27'
+                  : theme.colors.textMuted;
                 return (
                   <Pressable
                     key={s.id}
@@ -569,6 +656,18 @@ export default function HomeScreen() {
                         trackColor={theme.colors.divider}
                       />
                     </View>
+
+                    {/* Exam countdown pill */}
+                    {examDays !== undefined && (
+                      <View style={{
+                        backgroundColor: examDays < 14 ? '#FCEBEB' : examDays < 30 ? '#FAEEDA' : theme.colors.screenBg,
+                        borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3, marginRight: 6,
+                      }}>
+                        <Text style={{ fontSize: 10, fontWeight: '700', color: examColor! }}>
+                          {examDays === 0 ? 'Today' : `${examDays}d`}
+                        </Text>
+                      </View>
+                    )}
 
                     {/* CheckedIn badge */}
                     <View style={styles.subjectListBadge}>
@@ -599,8 +698,9 @@ export default function HomeScreen() {
             <>
               <View style={styles.weekStrip}>
                 {planWeekDays.map((d) => {
-                  const active = d === selectedDate;
-                  const today = d === toISODate(new Date());
+                  const active  = d === selectedDate;
+                  const today   = d === toISODate(new Date());
+                  const allDone = daysAllDone.has(d);
                   return (
                     <Pressable
                       key={d}
@@ -609,12 +709,13 @@ export default function HomeScreen() {
                         styles.dayPill,
                         active && styles.dayPillActive,
                         today && !active && styles.dayPillToday,
+                        allDone && !active && styles.dayPillDone,
                       ]}
                     >
-                      <Text style={[styles.dayText, active && styles.dayTextActive]}>
-                        {dayShortLabel(d)}
+                      <Text style={[styles.dayText, active && styles.dayTextActive, allDone && !active && styles.dayTextDone]}>
+                        {allDone ? '✓' : dayShortLabel(d)}
                       </Text>
-                      <Text style={[styles.dayNum, active && styles.dayTextActive]}>
+                      <Text style={[styles.dayNum, active && styles.dayTextActive, allDone && !active && styles.dayTextDone]}>
                         {dayNum(d)}
                       </Text>
                     </Pressable>
@@ -661,6 +762,7 @@ export default function HomeScreen() {
                           onPress={() => tabNav.navigate('Practice', {
                             subjectId: item.subjectId,
                             topicId: item.topicId,
+                            returnTo: 'Home',
                           })}
                         >
                           <Text style={styles.sessionStartBtnText}>
@@ -672,6 +774,21 @@ export default function HomeScreen() {
                   );
                 }}
               />
+
+              {daysAllDone.has(selectedDate) && sessionsForSelectedDay.length > 0 && (
+                <Pressable
+                  onPress={() => void shareDayProgress(selectedDate)}
+                  style={{
+                    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                    gap: 6, backgroundColor: '#DCFCE7', borderRadius: 12,
+                    paddingVertical: 12, marginBottom: 10,
+                  }}
+                >
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#166534' }}>
+                    🎉 Share today's progress
+                  </Text>
+                </Pressable>
+              )}
 
               <Pressable style={styles.openPlanBtn} onPress={() => tabNav.navigate('Plan')}>
                 <Text style={styles.openPlanBtnText}>Open full plan →</Text>

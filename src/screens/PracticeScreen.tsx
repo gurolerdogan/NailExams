@@ -299,6 +299,7 @@ export default function PracticeScreen() {
 
   const subjectIdFromNav = route.params?.subjectId;
   const topicIdFromNav   = route.params?.topicId;
+  const returnTo         = route.params?.returnTo;
 
   const [allTopics, setAllTopics]               = useState<Topic[]>([]);
   const [selectedSubject, setSelectedSubject]   = useState<Subject | null>(null);
@@ -310,7 +311,12 @@ export default function PracticeScreen() {
   const [note, setNote]                         = useState('');
   const [busy, setBusy]                         = useState(false);
   const [sheetVisible, setSheetVisible]         = useState(false);
-  const [celebration, setCelebration]           = useState<{ emoji: string; title: string; sub: string } | null>(null);
+  const [celebration, setCelebration]           = useState<{
+    emoji: string;
+    title: string;
+    sub: string;
+    link?: string;
+  } | null>(null);
 
   const slideAnim       = useRef(new Animated.Value(300)).current;
   const celebrationAnim = useRef(new Animated.Value(0)).current;
@@ -448,12 +454,15 @@ export default function PracticeScreen() {
     });
 
   // ── Save check-in ─────────────────────────────────────────────────────────────
-  const showCelebration = (payload: { emoji: string; title: string; sub: string }) => {
+  const showCelebration = (
+    payload: { emoji: string; title: string; sub: string; link?: string },
+    holdMs = 1800,
+  ) => {
     setCelebration(payload);
     celebrationAnim.setValue(0);
     Animated.sequence([
       Animated.spring(celebrationAnim, { toValue: 1, useNativeDriver: true, damping: 14, stiffness: 160 }),
-      Animated.delay(1600),
+      Animated.delay(holdMs),
       Animated.timing(celebrationAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
     ]).start(() => setCelebration(null));
   };
@@ -505,22 +514,38 @@ export default function PracticeScreen() {
       const allAttempts = await loadAttempts();
       void maybePromptOnNailedIt(confidence, allAttempts.length);
 
-      // Check for milestone celebrations
-      const prevConfidence = allTopics[idx]?.confidence ?? 0;
+      // Celebration for every check-in
       const allSubjectTopics = allTopics.filter((t) => t.subjectId === selectedSubject.id);
       const allNowHigh = allSubjectTopics.every((t) =>
         t.id === sheetTopic.id ? confidence >= 4 : (t.confidence ?? 0) >= 4,
       );
+      const pastPaperLink = PAST_PAPER_LINKS[selectedSubject.name];
 
-      if (confidence === 5 && prevConfidence < 5) {
-        void logEvent('topic_nailed', { topicId: sheetTopic.id, subjectId: selectedSubject.id });
-        showCelebration({ emoji: '🎯', title: 'Nailed it!', sub: sheetTopic.name });
-      } else if (allNowHigh && allSubjectTopics.length > 0) {
+      if (allNowHigh && allSubjectTopics.length > 0 && confidence >= 4) {
         void logEvent('subject_completed', { subjectId: selectedSubject.id });
-        showCelebration({ emoji: '🏆', title: `${selectedSubject.name} complete!`, sub: 'All topics at confident or above' });
+        showCelebration({ emoji: '🏆', title: `${selectedSubject.name} complete!`, sub: 'All topics at confident or above' }, 2200);
+      } else {
+        const LEVEL_CONTENT: Record<number, { emoji: string; titles: string[]; sub: string; holdMs: number }> = {
+          1: { emoji: '💪', titles: ["Keep going!", "You've got this!", "Don't give up!"],       sub: "This one needs work — keep revisiting it.", holdMs: 3000 },
+          2: { emoji: '📖', titles: ["Getting there!", "Keep at it!", "A bit more to go!"],      sub: "A few more practice sessions will help.",    holdMs: 3000 },
+          3: { emoji: '👍', titles: ["Way to go!", "Keep revising!", "Good progress!"],          sub: "You're building solid understanding.",         holdMs: 2000 },
+          4: { emoji: '⭐', titles: ["Almost nailed it!", "So close!", "Nearly there!"],         sub: "One more push and you'll have this.",          holdMs: 2000 },
+          5: { emoji: '🎯', titles: ["Nailed it!", "Outstanding!", "Brilliant work!"],           sub: sheetTopic.name,                               holdMs: 1800 },
+        };
+        const lvl = LEVEL_CONTENT[confidence]!;
+        const title = lvl.titles[Math.floor(Math.random() * lvl.titles.length)];
+        const link = (confidence <= 2 && pastPaperLink) ? pastPaperLink : undefined;
+        if (confidence === 5) void logEvent('topic_nailed', { topicId: sheetTopic.id, subjectId: selectedSubject.id });
+        showCelebration({ emoji: lvl.emoji, title, sub: lvl.sub, link }, lvl.holdMs);
       }
 
       closeSheet();
+
+      // Navigate back to the originating screen after a plan check-in
+      if (returnTo) {
+        // Small delay so the celebration overlay has time to appear before transition
+        setTimeout(() => tabNav.navigate(returnTo), 400);
+      }
     } catch (e: any) {
       Alert.alert('Save failed', 'Your check-in could not be saved. Please try again.');
     } finally {
@@ -826,22 +851,49 @@ export default function PracticeScreen() {
             transform: [{ scale: celebrationAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) }],
           }}
         >
-          <View style={{
-            backgroundColor: 'rgba(10,10,12,0.92)',
-            borderRadius: 24,
-            paddingHorizontal: 36,
-            paddingVertical: 32,
-            alignItems: 'center',
-            gap: 8,
-          }}>
-            <Text style={{ fontSize: 52 }}>{celebration.emoji}</Text>
-            <Text style={{ fontSize: 22, fontWeight: '800', color: '#FFFFFF', textAlign: 'center' }}>
+          <Pressable
+            pointerEvents="box-none"
+            style={{
+              backgroundColor: 'rgba(10,10,12,0.93)',
+              borderRadius: 28,
+              paddingHorizontal: 32,
+              paddingVertical: 28,
+              alignItems: 'center',
+              gap: 10,
+              marginHorizontal: 32,
+            }}
+            onPress={() => setCelebration(null)}
+          >
+            <Text style={{ fontSize: 64 }}>{celebration.emoji}</Text>
+            <Text style={{ fontSize: 22, fontWeight: '800', color: '#FFFFFF', textAlign: 'center', letterSpacing: -0.3 }}>
               {celebration.title}
             </Text>
-            <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', textAlign: 'center' }}>
+            <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', textAlign: 'center', lineHeight: 19 }}>
               {celebration.sub}
             </Text>
-          </View>
+            {celebration.link && (
+              <Pressable
+                onPress={() => {
+                  setCelebration(null);
+                  void Linking.openURL(celebration.link!);
+                }}
+                style={{
+                  marginTop: 4,
+                  backgroundColor: 'rgba(255,255,255,0.1)',
+                  borderRadius: 12,
+                  paddingHorizontal: 16,
+                  paddingVertical: 10,
+                  borderWidth: 1,
+                  borderColor: 'rgba(255,255,255,0.2)',
+                }}
+              >
+                <Text style={{ fontSize: 13, fontWeight: '600', color: '#FAC775', textAlign: 'center' }}>
+                  Need more help? Find past questions →
+                </Text>
+              </Pressable>
+            )}
+            <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', marginTop: 4 }}>tap to dismiss</Text>
+          </Pressable>
         </Animated.View>
       )}
     </>

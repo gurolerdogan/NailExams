@@ -1,5 +1,10 @@
 import Purchases, { type CustomerInfo, type PurchasesOfferings } from 'react-native-purchases';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
+
+// In Expo Go the RevenueCat native module isn't available — skip all RC calls.
+// PlusContext already sets isPlus=true in Expo Go via its own PLUS_GATE_BYPASS.
+const IS_EXPO_GO = Constants.appOwnership === 'expo';
 
 /**
  * RevenueCat API keys.
@@ -15,6 +20,7 @@ const RC_API_KEY_ANDROID: string = 'goog_REPLACE_WITH_YOUR_ANDROID_KEY';
 export const PLUS_ENTITLEMENT_ID = 'plus';
 
 export function isRevenueCatConfigured(): boolean {
+  if (IS_EXPO_GO) return false;
   return Platform.OS === 'ios'
     ? RC_API_KEY_IOS !== 'appl_REPLACE_WITH_YOUR_IOS_KEY'
     : RC_API_KEY_ANDROID !== 'goog_REPLACE_WITH_YOUR_ANDROID_KEY';
