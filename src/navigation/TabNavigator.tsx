@@ -66,7 +66,17 @@ export default function TabNavigator() {
       <Tab.Screen name="Home" component={HomeNavigator} />
       <Tab.Screen name="Practice" component={PracticeScreen} />
       <Tab.Screen name="Plan" component={PlanScreen} />
-      <Tab.Screen name="Settings" component={SettingsNavigator} />
+      <Tab.Screen
+        name="Settings"
+        component={SettingsNavigator}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            e.preventDefault();
+            // Always land on SettingsHome regardless of what was last on the stack
+            navigation.navigate('Settings', { screen: 'SettingsHome' });
+          },
+        })}
+      />
     </Tab.Navigator>
   );
 }

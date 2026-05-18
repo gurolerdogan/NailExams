@@ -18,6 +18,7 @@ export default (): ExpoConfig => {
     newArchEnabled: true,
     plugins: [
       'expo-web-browser',
+      '@react-native-community/datetimepicker',
       ['@react-native-google-signin/google-signin', {
         iosUrlScheme: 'com.googleusercontent.apps.948483076530-npmq65i0lqnk6cah7trig8aainjgknmt',
       }],
