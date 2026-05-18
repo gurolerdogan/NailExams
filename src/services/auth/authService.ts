@@ -10,6 +10,7 @@ import {
   User,
 } from 'firebase/auth';
 import { wipeAll } from '../storage/nailexamsStorage';
+import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { getFirebaseAuth } from '../../firebase/config';
@@ -93,6 +94,7 @@ export async function signInWithGoogle(): Promise<AuthResult> {
 }
 
 export async function signInWithApple(): Promise<AuthResult> {
+  if (Platform.OS !== 'ios') throw new Error('Apple Sign-In is only available on iOS.');
   const appleCredential = await AppleAuthentication.signInAsync({
     requestedScopes: [
       AppleAuthentication.AppleAuthenticationScope.FULL_NAME,

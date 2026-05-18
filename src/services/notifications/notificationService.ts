@@ -1,4 +1,5 @@
 import * as Notifications from 'expo-notifications';
+import { SchedulableTriggerInputTypes } from 'expo-notifications';
 import { loadPlan } from '../storage/planStorage';
 import { loadTopics } from '../storage/nailexamsStorage';
 import { loadAttempts } from '../storage/practiceStorage';
@@ -8,14 +9,14 @@ import { PLAN_REMINDERS, GENERIC_REMINDERS, STREAK_NUDGES, WEEKLY_SUMMARY } from
 import type { NotificationMessage } from '../../notifications/messages';
 
 // ── Notification identifiers ───────────────────────────────────────────────────
-const MANDATORY_ID    = 'ne-mandatory-reminder';   // 6pm daily — always on
-const EXTRA_ID        = 'ne-extra-reminder';        // user-chosen extra
-const STREAK_NUDGE_ID = 'ne-streak-nudge';          // 9pm streak nudge
-const WEEKLY_ID       = 'ne-weekly-summary';        // Sunday 8pm
+const MANDATORY_ID    = 'ne-mandatory-reminder';
+const EXTRA_ID        = 'ne-extra-reminder';
+const STREAK_NUDGE_ID = 'ne-streak-nudge';
+const WEEKLY_ID       = 'ne-weekly-summary';
 
-const MANDATORY_HOUR:   number = 18; // 6pm
+const MANDATORY_HOUR:   number = 18;
 const MANDATORY_MINUTE: number = 0;
-const STREAK_HOUR:      number = 21; // 9pm
+const STREAK_HOUR:      number = 21;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -38,7 +39,7 @@ function applyTemplate(msg: NotificationMessage, count: number) {
   };
 }
 
-/** Returns a Date at the given hour:minute — today if that time hasn't passed, tomorrow if it has. */
+/** Next occurrence of hour:minute — today if not yet passed, otherwise tomorrow. */
 function nextOccurrence(hour: number, minute: number): Date {
   const now = new Date();
   const candidate = new Date(now);
@@ -47,15 +48,15 @@ function nextOccurrence(hour: number, minute: number): Date {
   return candidate;
 }
 
-/** Cancel a specific notification without disturbing others. */
 async function cancelById(id: string): Promise<void> {
-  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
-  if (scheduled.some((n) => n.identifier === id)) {
-    await Notifications.cancelScheduledNotificationAsync(id);
-  }
+  try {
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    if (scheduled.some((n) => n.identifier === id)) {
+      await Notifications.cancelScheduledNotificationAsync(id);
+    }
+  } catch { /* swallow — non-critical */ }
 }
 
-/** Build plan-aware reminder content. */
 async function buildReminderContent(): Promise<{ title: string; body: string }> {
   const [plan, topics] = await Promise.all([loadPlan(), loadTopics()]);
   const todayISO = toISODate(new Date());
@@ -81,14 +82,12 @@ export async function requestNotificationPermissions(): Promise<boolean> {
 }
 
 /**
- * Schedules all daily reminders. Safe to call on every app open — idempotent.
+ * Schedules all daily reminders. Safe to call on every app open.
  *
- * Always scheduled (non-cancellable in-app):
- *   • 6pm mandatory reminder — plan-aware content
- *   • 9pm streak nudge — only when an active streak exists
+ * Mandatory 6pm and user extra use DAILY repeating triggers — they fire every
+ * day at the set time without requiring the app to reopen and reschedule.
  *
- * User-controlled extra:
- *   • Extra reminder at user-chosen time — only when extraEnabled
+ * Streak nudge and weekly summary remain one-shot (content depends on live data).
  */
 export async function scheduleStudyReminder(): Promise<void> {
   try {
@@ -98,59 +97,67 @@ export async function scheduleStudyReminder(): Promise<void> {
     const [settings, plan] = await Promise.all([loadNotifSettings(), loadPlan()]);
     const content = await buildReminderContent();
 
-    // ── Mandatory 6pm reminder ────────────────────────────────────────────────
+    // ── Mandatory 6pm — daily repeating ──────────────────────────────────────
     await cancelById(MANDATORY_ID);
     await Notifications.scheduleNotificationAsync({
       identifier: MANDATORY_ID,
       content: { title: content.title, body: content.body, sound: true },
-      trigger: { date: nextOccurrence(MANDATORY_HOUR, MANDATORY_MINUTE) } as any,
+      trigger: {
+        type: SchedulableTriggerInputTypes.DAILY,
+        hour: MANDATORY_HOUR,
+        minute: MANDATORY_MINUTE,
+      },
     });
 
-    // ── Extra reminder (user-chosen, optional) ────────────────────────────────
+    // ── Extra reminder — daily repeating at user-chosen time ──────────────────
     await cancelById(EXTRA_ID);
     if (settings.extraEnabled) {
-      // Don't double-fire if extra is set to the same time as mandatory
       const isDuplicate =
         settings.extraHour === MANDATORY_HOUR && settings.extraMinute === MANDATORY_MINUTE;
       if (!isDuplicate) {
         await Notifications.scheduleNotificationAsync({
           identifier: EXTRA_ID,
           content: { title: content.title, body: content.body, sound: true },
-          trigger: { date: nextOccurrence(settings.extraHour, settings.extraMinute) } as any,
+          trigger: {
+            type: SchedulableTriggerInputTypes.DAILY,
+            hour: settings.extraHour,
+            minute: settings.extraMinute,
+          },
         });
       }
     }
 
-    // ── Streak nudge at 9pm ───────────────────────────────────────────────────
+    // ── Streak nudge at 9pm — one-shot (only when streak active) ─────────────
     await cancelById(STREAK_NUDGE_ID);
     const streak = plan ? computeStreak(plan.sessions) : 0;
     if (streak > 0) {
-      const nudgeDate = nextOccurrence(STREAK_HOUR, 0);
-      const nudge = applyTemplate(pickRandom(STREAK_NUDGES), streak);
-      // Only schedule if 9pm doesn't clash with mandatory or extra
       const clashsMandatory = MANDATORY_HOUR === STREAK_HOUR;
-      const clashsExtra = settings.extraEnabled && settings.extraHour === STREAK_HOUR && settings.extraMinute === 0;
+      const clashsExtra = settings.extraEnabled &&
+        settings.extraHour === STREAK_HOUR && settings.extraMinute === 0;
       if (!clashsMandatory && !clashsExtra) {
+        const nudge = applyTemplate(pickRandom(STREAK_NUDGES), streak);
         await Notifications.scheduleNotificationAsync({
           identifier: STREAK_NUDGE_ID,
           content: { title: nudge.title, body: nudge.body, sound: false },
-          trigger: { date: nudgeDate } as any,
+          trigger: {
+            type: SchedulableTriggerInputTypes.DATE,
+            date: nextOccurrence(STREAK_HOUR, 0),
+          },
         });
       }
     }
 
     if (__DEV__) {
       // eslint-disable-next-line no-console
-      console.log(`[NailExams] Mandatory @ 6pm | extra=${settings.extraEnabled ? `${settings.extraHour}:${String(settings.extraMinute).padStart(2,'0')}` : 'off'} | streak=${streak}`);
+      console.log(
+        `[NailExams] Scheduled: mandatory=daily@18:00 | extra=${settings.extraEnabled ? `daily@${settings.extraHour}:${String(settings.extraMinute).padStart(2,'0')}` : 'off'} | streak=${streak}`,
+      );
     }
   } catch (e) {
     if (__DEV__) console.warn('[NailExams] scheduleStudyReminder failed', e); // eslint-disable-line no-console
   }
 }
 
-/**
- * Schedules the weekly Sunday 8pm summary. Safe to call on every app open.
- */
 export async function scheduleWeeklySummary(): Promise<void> {
   try {
     const { status } = await Notifications.getPermissionsAsync();
@@ -183,7 +190,10 @@ export async function scheduleWeeklySummary(): Promise<void> {
     await Notifications.scheduleNotificationAsync({
       identifier: WEEKLY_ID,
       content: { title: msg.title, body, sound: true },
-      trigger: { date: next } as any,
+      trigger: {
+        type: SchedulableTriggerInputTypes.DATE,
+        date: next,
+      },
     });
   } catch (e) {
     if (__DEV__) console.warn('[NailExams] scheduleWeeklySummary failed', e); // eslint-disable-line no-console

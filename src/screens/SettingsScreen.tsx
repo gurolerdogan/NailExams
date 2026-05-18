@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
@@ -521,7 +522,7 @@ export default function SettingsScreen({ navigation }: Props) {
     <Modal
       visible={timePickerVisible}
       transparent
-      animationType="fade"
+      animationType="slide"
       onRequestClose={() => setTimePickerVisible(false)}
     >
       <Pressable
@@ -532,78 +533,48 @@ export default function SettingsScreen({ navigation }: Props) {
           style={{
             backgroundColor: theme.colors.cardBg,
             borderTopLeftRadius: 24, borderTopRightRadius: 24,
-            padding: 24, paddingBottom: 40,
+            paddingTop: 20, paddingHorizontal: 20, paddingBottom: 40,
           }}
           onPress={() => {}}
         >
-          <Text style={{ fontSize: 16, fontWeight: '600', color: theme.colors.textPrimary, marginBottom: 4 }}>
+          <Text style={{ fontSize: 16, fontWeight: '600', color: theme.colors.textPrimary, marginBottom: 2 }}>
             Extra reminder time
           </Text>
-          <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginBottom: 20 }}>
+          <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginBottom: 4 }}>
             Added on top of the mandatory 6:00 pm reminder.
           </Text>
 
-          {/* Hour picker */}
-          <Text style={{ fontSize: 12, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 0.5, color: theme.colors.textMuted, marginBottom: 8 }}>
-            Hour
-          </Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              {Array.from({ length: 24 }, (_, h) => {
-                const active = h === draftHour;
-                const label  = h === 0 ? '12 am' : h < 12 ? `${h} am` : h === 12 ? '12 pm' : `${h - 12} pm`;
-                return (
-                  <Pressable
-                    key={h}
-                    onPress={() => setDraftHour(h)}
-                    style={{
-                      paddingHorizontal: 14, paddingVertical: 9,
-                      borderRadius: 10,
-                      backgroundColor: active ? theme.colors.buttonPrimaryBg : theme.colors.screenBg,
-                    }}
-                  >
-                    <Text style={{ fontSize: 13, fontWeight: '500', color: active ? theme.colors.buttonPrimaryText : theme.colors.textPrimary }}>
-                      {label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </ScrollView>
-
-          {/* Minute picker */}
-          <Text style={{ fontSize: 12, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 0.5, color: theme.colors.textMuted, marginBottom: 8 }}>
-            Minute
-          </Text>
-          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 24 }}>
-            {[0, 15, 30, 45].map((m) => {
-              const active = m === draftMinute;
-              return (
-                <Pressable
-                  key={m}
-                  onPress={() => setDraftMinute(m)}
-                  style={{
-                    flex: 1, paddingVertical: 11, borderRadius: 10, alignItems: 'center',
-                    backgroundColor: active ? theme.colors.buttonPrimaryBg : theme.colors.screenBg,
-                  }}
-                >
-                  <Text style={{ fontSize: 13, fontWeight: '500', color: active ? theme.colors.buttonPrimaryText : theme.colors.textPrimary }}>
-                    :{String(m).padStart(2, '0')}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          {/* Native time picker — drum roll on iOS, clock dialog on Android */}
+          <DateTimePicker
+            value={(() => {
+              const d = new Date();
+              d.setHours(draftHour, draftMinute, 0, 0);
+              return d;
+            })()}
+            mode="time"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            minuteInterval={Platform.OS === 'ios' ? 5 : 1}
+            onChange={(_event, date) => {
+              if (date) {
+                setDraftHour(date.getHours());
+                // Snap to nearest 5 minutes (iOS already does this via minuteInterval;
+                // on Android the wheel shows all minutes so we snap on change)
+                setDraftMinute(Math.round(date.getMinutes() / 5) * 5 % 60);
+              }
+            }}
+            style={{ height: Platform.OS === 'ios' ? 180 : undefined }}
+            {...(Platform.OS === 'ios' ? { textColor: theme.colors.textPrimary } : {})}
+          />
 
           <Pressable
             onPress={saveTime}
             style={{
               backgroundColor: theme.colors.buttonPrimaryBg, borderRadius: 16,
-              paddingVertical: 15, alignItems: 'center',
+              paddingVertical: 15, alignItems: 'center', marginTop: 8,
             }}
           >
             <Text style={{ fontSize: 15, fontWeight: '600', color: theme.colors.buttonPrimaryText }}>
-              Set extra reminder for {formatTime(draftHour, draftMinute)}
+              Set reminder for {formatTime(draftHour, draftMinute)}
             </Text>
           </Pressable>
         </Pressable>

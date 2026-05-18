@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Platform,
   Pressable,
   ScrollView,
   Share,
@@ -281,7 +282,8 @@ export default function AnalyticsScreen() {
       }
 
       if (uri) {
-        await Share.share({ url: uri });
+        // iOS supports sharing via url; Android requires message (file:// URIs don't work via url on Android)
+        await Share.share(Platform.OS === 'ios' ? { url: uri } : { message: uri });
       } else {
         // Fallback: plain text (Android or if capture fails)
         const subject = subjects.find((s) => s.id === selectedSubjectId);

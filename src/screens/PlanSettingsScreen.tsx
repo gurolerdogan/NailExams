@@ -19,7 +19,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { usePlus } from '../context/PlusContext';
 import { loadTopics } from '../services/storage/nailexamsStorage';
-import { loadPlanConfig, savePlanConfig, savePlan } from '../services/storage/planStorage';
+import { loadPlanConfig, savePlanConfig, savePlan, loadPlan } from '../services/storage/planStorage';
 import { loadWeeklyGoal, saveWeeklyGoal, type WeeklyGoal } from '../services/storage/weeklyGoalStorage';
 import { generatePlan } from '../services/plan/generateWeeklyPlan';
 import { logEvent } from '../services/logging/logEvent';
@@ -268,6 +268,7 @@ export default function PlanSettingsScreen() {
   const [topics, setTopics]     = useState<Topic[]>([]);
   const [busy, setBusy]         = useState(false);
   const [weeklyGoal, setWeeklyGoal] = useState<WeeklyGoal | null>(null);
+  const [hasActivePlan, setHasActivePlan] = useState(false);
 
   // ── auto-generate ────────────────────────────────────────────────────────────
   const [config, setConfig] = useState<PlanConfig>(DEFAULT_CONFIG);
@@ -291,9 +292,12 @@ export default function PlanSettingsScreen() {
   subjectsRef.current = subjects;
 
   const load = useCallback(async () => {
-    const [savedConfig, allTopics, goal] = await Promise.all([loadPlanConfig(), loadTopics(), loadWeeklyGoal()]);
+    const [savedConfig, allTopics, goal, existingPlan] = await Promise.all([
+      loadPlanConfig(), loadTopics(), loadWeeklyGoal(), loadPlan(),
+    ]);
     setTopics(allTopics);
     setWeeklyGoal(goal);
+    setHasActivePlan(!!existingPlan && existingPlan.sessions.length > 0);
     const currentSubjects = subjectsRef.current;
     const subjectIds =
       savedConfig.subjectIds.length > 0
@@ -425,8 +429,7 @@ export default function PlanSettingsScreen() {
   };
 
   // ── actions ──────────────────────────────────────────────────────────────────
-  const onGenerate = async () => {
-    if (busy || !canGenerate) return;
+  const doGenerate = async () => {
     try {
       setBusy(true);
       await savePlanConfig(config);
@@ -438,13 +441,29 @@ export default function PlanSettingsScreen() {
         topicOrder: config.topicOrder,
         sessions: plan.sessions.length,
       });
-      tabNav.goBack();      // pop PlanSettings so Settings tab shows SettingsHome on return
+      tabNav.goBack();
       tabNav.navigate('Plan');
     } catch (e: any) {
       Alert.alert('Failed to generate plan', String(e?.message ?? e));
     } finally {
       setBusy(false);
     }
+  };
+
+  const onGenerate = () => {
+    if (busy || !canGenerate) return;
+    if (hasActivePlan) {
+      Alert.alert(
+        'Replace existing plan?',
+        'You already have an active study plan. Generating a new one will replace it. Are you sure?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Replace', style: 'destructive', onPress: () => void doGenerate() },
+        ],
+      );
+      return;
+    }
+    void doGenerate();
   };
 
   const onFinishManual = async () => {

@@ -244,7 +244,8 @@ function createStyles(theme: Theme) {
       color: theme.colors.textPrimary,
       marginBottom: 2,
     },
-    sheetSubject: { fontSize: 12, color: theme.colors.textSecondary, marginBottom: 18 },
+    sheetSubject: { fontSize: 12, color: theme.colors.textSecondary, marginBottom: 6 },
+    sheetLastCheckin: { fontSize: 11, color: theme.colors.textMuted, marginBottom: 18, fontStyle: 'italic' },
     sheetLabel: { fontSize: 12, color: theme.colors.textSecondary, marginBottom: 8 },
 
     confSelector: { flexDirection: 'row', gap: 8, marginBottom: 18 },
@@ -326,7 +327,12 @@ export default function PracticeScreen() {
   const lastNoteByTopicRef = useRef(lastNoteByTopic);
   lastNoteByTopicRef.current = lastNoteByTopic;
 
+  // True only when the sheet was auto-opened by a plan deep-link in the current session.
+  // Manually tapping a topic resets this to false so returnTo is never triggered.
+  const openedFromPlanRef = useRef(false);
+
   const openSheet = useCallback((topic: Topic) => {
+    openedFromPlanRef.current = false; // manual open — clear the plan-link flag
     setSheetTopic(topic);
     const existing = topic.confidence && topic.confidence > 0
       ? (topic.confidence as 1 | 2 | 3 | 4 | 5)
@@ -397,6 +403,7 @@ export default function PracticeScreen() {
     if (t) {
       handledTopicIdRef.current = topicIdFromNav;
       openSheet(t);
+      openedFromPlanRef.current = true; // mark as plan-link open AFTER openSheet resets it
     }
   }, [topicIdFromNav, allTopics, openSheet]);
 
@@ -457,6 +464,7 @@ export default function PracticeScreen() {
   const showCelebration = (
     payload: { emoji: string; title: string; sub: string; link?: string },
     holdMs = 1800,
+    onComplete?: () => void,
   ) => {
     setCelebration(payload);
     celebrationAnim.setValue(0);
@@ -464,7 +472,10 @@ export default function PracticeScreen() {
       Animated.spring(celebrationAnim, { toValue: 1, useNativeDriver: true, damping: 14, stiffness: 160 }),
       Animated.delay(holdMs),
       Animated.timing(celebrationAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
-    ]).start(() => setCelebration(null));
+    ]).start(() => {
+      setCelebration(null);
+      onComplete?.();
+    });
   };
 
   const submit = async () => {
@@ -521,9 +532,17 @@ export default function PracticeScreen() {
       );
       const pastPaperLink = PAST_PAPER_LINKS[selectedSubject.name];
 
+      // Build the post-celebration callback — navigates back if this was a plan deep-link
+      const afterCelebration = (returnTo && openedFromPlanRef.current)
+        ? () => {
+            openedFromPlanRef.current = false;
+            tabNav.navigate(returnTo);
+          }
+        : undefined;
+
       if (allNowHigh && allSubjectTopics.length > 0 && confidence >= 4) {
         void logEvent('subject_completed', { subjectId: selectedSubject.id });
-        showCelebration({ emoji: '🏆', title: `${selectedSubject.name} complete!`, sub: 'All topics at confident or above' }, 2200);
+        showCelebration({ emoji: '🏆', title: `${selectedSubject.name} complete!`, sub: 'All topics at confident or above' }, 2200, afterCelebration);
       } else {
         const LEVEL_CONTENT: Record<number, { emoji: string; titles: string[]; sub: string; holdMs: number }> = {
           1: { emoji: '💪', titles: ["Keep going!", "You've got this!", "Don't give up!"],       sub: "This one needs work — keep revisiting it.", holdMs: 3000 },
@@ -536,16 +555,10 @@ export default function PracticeScreen() {
         const title = lvl.titles[Math.floor(Math.random() * lvl.titles.length)];
         const link = (confidence <= 2 && pastPaperLink) ? pastPaperLink : undefined;
         if (confidence === 5) void logEvent('topic_nailed', { topicId: sheetTopic.id, subjectId: selectedSubject.id });
-        showCelebration({ emoji: lvl.emoji, title, sub: lvl.sub, link }, lvl.holdMs);
+        showCelebration({ emoji: lvl.emoji, title, sub: lvl.sub, link }, lvl.holdMs, afterCelebration);
       }
 
       closeSheet();
-
-      // Navigate back to the originating screen after a plan check-in
-      if (returnTo) {
-        // Small delay so the celebration overlay has time to appear before transition
-        setTimeout(() => tabNav.navigate(returnTo), 400);
-      }
     } catch (e: any) {
       Alert.alert('Save failed', 'Your check-in could not be saved. Please try again.');
     } finally {
@@ -766,6 +779,14 @@ export default function PracticeScreen() {
           </Text>
           <Text style={styles.sheetSubject}>{selectedSubject?.name}</Text>
 
+          {sheetTopic?.lastPracticedAt ? (
+            <Text style={styles.sheetLastCheckin}>
+              Last checked in: {new Date(sheetTopic.lastPracticedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
+            </Text>
+          ) : (
+            <Text style={styles.sheetLastCheckin}>Not checked in yet</Text>
+          )}
+
           <Text style={styles.sheetLabel}>How confident are you?</Text>
           <View style={styles.confSelector}>
             {([1, 2, 3, 4, 5] as const).map((v) => {
@@ -842,7 +863,6 @@ export default function PracticeScreen() {
       {/* ── Milestone celebration overlay ── */}
       {celebration && (
         <Animated.View
-          pointerEvents="none"
           style={{
             ...StyleSheet.absoluteFillObject,
             alignItems: 'center',
@@ -851,8 +871,12 @@ export default function PracticeScreen() {
             transform: [{ scale: celebrationAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) }],
           }}
         >
+          {/* Full-screen tap blocker — dismisses on tap outside the card */}
           <Pressable
-            pointerEvents="box-none"
+            style={StyleSheet.absoluteFillObject}
+            onPress={() => setCelebration(null)}
+          />
+          <Pressable
             style={{
               backgroundColor: 'rgba(10,10,12,0.93)',
               borderRadius: 28,

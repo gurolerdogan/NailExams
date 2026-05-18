@@ -13,6 +13,7 @@ import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { usePlus } from '../context/PlusContext';
 import { loadPlan } from '../services/storage/planStorage';
 import { loadTopics } from '../services/storage/nailexamsStorage';
 import { loadAttempts } from '../services/storage/practiceStorage';
@@ -269,14 +270,31 @@ function createStyles(theme: Theme) {
   });
 }
 
+const PLUS_PROMOS = [
+  { icon: '📚', text: 'Add as many subjects as you want with NailExams Plus.' },
+  { icon: '🎨', text: 'Unlock all app themes — Soft Focus, Neon and Dark Terminal — with Plus.' },
+  { icon: '📅', text: 'Upgrade to Plus to create 60 and 90-day study plans.' },
+  { icon: '✏️', text: 'Plan your revision manually, day by day, with Plus.' },
+  { icon: '📊', text: 'See your confidence trend over time with Plus Analytics.' },
+  { icon: '📤', text: 'Share your progress as a branded card with NailExams Plus.' },
+];
+
 type HomeMode = 'subjects' | 'plan';
 
 export default function HomeScreen() {
   const tabNav = useNavigation<BottomTabNavigationProp<AppTabParamList>>();
   const { user, profile, subjects, refreshUserData } = useAuth();
   const { theme } = useTheme();
+  const { isPlus } = usePlus();
 
   const styles = useMemo(() => createStyles(theme), [theme]);
+
+  // Pick a random promo once per mount so it feels fresh each time the screen is visited
+  const promo = useMemo(
+    () => PLUS_PROMOS[Math.floor(Math.random() * PLUS_PROMOS.length)],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
 
   const [mode, setMode] = useState<HomeMode>('subjects');
   const [plan, setPlan] = useState<WeeklyPlan | null>(null);
@@ -301,7 +319,9 @@ export default function HomeScreen() {
     // Count check-ins since Monday 00:00
     const monday = new Date(); monday.setHours(0,0,0,0);
     monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
-    setWeekCheckins(attempts.filter((a) => a.ts >= monday.getTime()).length);
+    const weekAttempts = attempts.filter((a) => a.ts >= monday.getTime());
+    const uniqueTopics = new Set(weekAttempts.map((a) => a.topicId));
+    setWeekCheckins(uniqueTopics.size);
   }, [refreshUserData]);
 
   useEffect(() => { void load(); }, [load]);
@@ -796,6 +816,31 @@ export default function HomeScreen() {
             </>
           )}
         </View>
+      )}
+      {/* ── Plus promo banner — free users only ── */}
+      {!isPlus && (
+        <Pressable
+          onPress={() => tabNav.navigate('Settings', { screen: 'Paywall' })}
+          style={{
+            flexDirection: 'row', alignItems: 'center', gap: 12,
+            backgroundColor: theme.colors.cardBg,
+            borderRadius: 14, padding: 14, marginTop: 8,
+            borderWidth: 1, borderColor: theme.colors.cardBorder,
+          }}
+        >
+          <Text style={{ fontSize: 22 }}>{promo.icon}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 12, color: theme.colors.textSecondary, lineHeight: 17 }}>
+              {promo.text}
+            </Text>
+          </View>
+          <View style={{
+            backgroundColor: '#FAC775', borderRadius: 8,
+            paddingHorizontal: 8, paddingVertical: 3,
+          }}>
+            <Text style={{ fontSize: 10, fontWeight: '700', color: '#633806' }}>PLUS</Text>
+          </View>
+        </Pressable>
       )}
     </ScrollView>
   );
