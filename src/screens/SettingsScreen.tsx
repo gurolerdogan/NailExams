@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -9,7 +9,6 @@ import { wipeAll, loadTopics } from '../services/storage/nailexamsStorage';
 import { loadAttempts } from '../services/storage/practiceStorage';
 import { deleteAccount } from '../services/auth/authService';
 import { logEvent } from '../services/logging/logEvent';
-import { getAppEnv } from '../firebase/config';
 import {
   loadNotifSettings,
   saveNotifSettings,
@@ -19,7 +18,10 @@ import { scheduleStudyReminder } from '../services/notifications/notificationSer
 import { usePlus } from '../context/PlusContext';
 import type { Theme } from '../themes';
 
-const IS_DEV = getAppEnv() === 'development';
+const ADMIN_EMAILS = new Set([
+  'gurolerdogan@gmail.com',
+]);
+
 import type { SettingsStackParamList } from '../navigation/SettingsNavigator';
 
 type Props = NativeStackScreenProps<SettingsStackParamList, 'SettingsHome'>;
@@ -181,6 +183,8 @@ export default function SettingsScreen({ navigation }: Props) {
   const { theme } = useTheme();
   const { user, profile, subjects, logout, refreshOnboarding, refreshUserData } = useAuth();
   const { isPlus } = usePlus();
+
+  const isAdmin = ADMIN_EMAILS.has(user?.email ?? '');
 
   const styles = useMemo(() => createStyles(theme), [theme]);
 
@@ -463,11 +467,43 @@ export default function SettingsScreen({ navigation }: Props) {
         />
       </View>
 
-      {/* ── Developer section — dev builds only ── */}
-      {IS_DEV && (
-        <>
-          <Text style={styles.sectionLabel}>Developer</Text>
-          <View style={styles.menuGroup}>
+      {/* ── Subscription section ── */}
+      <Text style={styles.sectionLabel}>Subscription</Text>
+      <View style={styles.menuGroup}>
+        <MenuRow
+          icon="⭐"
+          iconBg="#FEF9C3"
+          label={isPlus ? 'Manage plan' : 'Choose a Plan'}
+          onPress={() => navigation.navigate('ChoosePlan')}
+          styles={styles}
+        />
+      </View>
+
+      {/* ── Legal section ── */}
+      <Text style={styles.sectionLabel}>Legal</Text>
+      <View style={styles.menuGroup}>
+        <MenuRow
+          icon="📄"
+          iconBg="#F4F4F6"
+          label="Terms of Use"
+          onPress={() => void Linking.openURL('https://www.apple.com/legal/internet-services/itunes/dev/stdeula/')}
+          styles={styles}
+        />
+        <View style={styles.menuDivider} />
+        <MenuRow
+          icon="🔒"
+          iconBg="#F4F4F6"
+          label="Privacy Policy"
+          onPress={() => void Linking.openURL('https://gurolerdogan.github.io/NailExams/privacy')}
+          styles={styles}
+        />
+      </View>
+
+      {/* ── Account section ── */}
+      <Text style={styles.sectionLabel}>Account</Text>
+      <View style={styles.menuGroup}>
+        {isAdmin && (
+          <>
             <MenuRow
               icon="🪵"
               iconBg="#F5F5F5"
@@ -477,23 +513,19 @@ export default function SettingsScreen({ navigation }: Props) {
               styles={styles}
             />
             <View style={styles.menuDivider} />
-            <MenuRow
-              icon="⚠️"
-              iconBg="#FCEBEB"
-              label="Reset onboarding (wipe data)"
-              destructive
-              muted
-              showChevron={false}
-              onPress={onReset}
-              styles={styles}
-            />
-          </View>
-        </>
-      )}
-
-      {/* ── Account section ── */}
-      <Text style={styles.sectionLabel}>Account</Text>
-      <View style={styles.menuGroup}>
+          </>
+        )}
+        <MenuRow
+          icon="⚠️"
+          iconBg="#FCEBEB"
+          label="Reset onboarding"
+          destructive
+          muted
+          showChevron={false}
+          onPress={onReset}
+          styles={styles}
+        />
+        <View style={styles.menuDivider} />
         <MenuRow
           icon="🚪"
           iconBg="#FBEAF0"
