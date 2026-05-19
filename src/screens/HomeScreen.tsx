@@ -303,10 +303,11 @@ export default function HomeScreen() {
   const [weeklyGoal, setWeeklyGoal] = useState<WeeklyGoal | null>(null);
   const [weekCheckins, setWeekCheckins] = useState(0);
 
-  const streak = useMemo(
-    () => (plan ? computeStreak(plan.sessions) : 0),
-    [plan],
-  );
+  const streak = useMemo(() => {
+    const real = plan ? computeStreak(plan.sessions) : 0;
+    // DEV ONLY — inflates streak for App Store screenshots. Revert before release.
+    return __DEV__ ? Math.max(real, 5) : real;
+  }, [plan]);
 
   const load = useCallback(async () => {
     await refreshUserData();

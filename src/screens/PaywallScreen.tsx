@@ -2,12 +2,16 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+
+const PRIVACY_POLICY_URL = 'https://gurolerdogan.github.io/NailExams/privacy';
+const TERMS_URL          = 'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/';
 import { useNavigation } from '@react-navigation/native';
 import type { PurchasesPackage } from 'react-native-purchases';
 import { PACKAGE_TYPE } from 'react-native-purchases';
@@ -95,9 +99,41 @@ function createStyles(theme: Theme) {
     restoreBtn: { alignItems: 'center', paddingVertical: 8 },
     restoreText: { fontSize: 13, color: theme.colors.textMuted },
 
+    subscriptionDetails: {
+      backgroundColor: theme.colors.cardBg,
+      borderRadius: 10,
+      padding: 12,
+      marginBottom: 12,
+    },
+    subscriptionDetailLine: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      textAlign: 'center',
+      lineHeight: 18,
+    },
+
     legal: {
       textAlign: 'center', fontSize: 11, color: theme.colors.textMuted,
       marginTop: 16, lineHeight: 16,
+    },
+
+    legalLinks: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      gap: 8,
+      marginTop: 12,
+      marginBottom: 8,
+    },
+    legalLink: {
+      fontSize: 12,
+      color: theme.colors.accent,
+      fontWeight: '500',
+      textDecorationLine: 'underline',
+    },
+    legalLinkSep: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
     },
 
     alreadyPlus: {
@@ -280,11 +316,36 @@ export default function PaywallScreen() {
         <Text style={styles.restoreText}>{restoring ? 'Restoring…' : 'Restore purchase'}</Text>
       </Pressable>
 
+      {/* Subscription details — required by App Store Review */}
+      {selectedPkg && (
+        <View style={styles.subscriptionDetails}>
+          <Text style={styles.subscriptionDetailLine}>
+            <Text style={{ fontWeight: '600' }}>NailExams Plus</Text>
+            {' · '}
+            {selectedPkg.packageType === PACKAGE_TYPE.ANNUAL ? '1-year subscription' : '1-month subscription'}
+            {' · '}
+            {selectedPkg.product.priceString}
+            {selectedPkg.packageType === PACKAGE_TYPE.ANNUAL ? '/year' : '/month'}
+          </Text>
+        </View>
+      )}
+
       <Text style={styles.legal}>
-        Payment charged to your Apple ID account at confirmation of purchase.
-        Subscription automatically renews unless cancelled at least 24 hours before the end of the current period.
-        Manage or cancel anytime in your Apple ID Settings.
+        Payment charged to your Apple ID at confirmation. Subscription renews automatically unless
+        cancelled at least 24 hours before the end of the current period.
+        Manage or cancel in your Apple ID Settings.
       </Text>
+
+      {/* Required links — Terms of Use and Privacy Policy */}
+      <View style={styles.legalLinks}>
+        <Pressable onPress={() => void Linking.openURL(TERMS_URL)} hitSlop={8}>
+          <Text style={styles.legalLink}>Terms of Use</Text>
+        </Pressable>
+        <Text style={styles.legalLinkSep}>·</Text>
+        <Pressable onPress={() => void Linking.openURL(PRIVACY_POLICY_URL)} hitSlop={8}>
+          <Text style={styles.legalLink}>Privacy Policy</Text>
+        </Pressable>
+      </View>
     </ScrollView>
   );
 }
