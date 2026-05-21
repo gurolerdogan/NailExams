@@ -47,6 +47,7 @@ export default (): ExpoConfig => {
     android: {
       package: 'com.gurolerdogan.nailexams',
       versionCode: 1,
+      googleServicesFile: './google-services.json',   // ← add this
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',
         backgroundColor: '#0A0A0C',

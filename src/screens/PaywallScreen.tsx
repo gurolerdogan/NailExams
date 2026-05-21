@@ -29,10 +29,10 @@ import { logEvent } from '../services/logging/logEvent';
 import type { Theme } from '../themes';
 
 const FEATURES = [
-  { icon: '📚', label: 'Unlimited subjects', sub: 'Free plan is limited to 3' },
   { icon: '📅', label: '60 & 90-day study plans', sub: 'Free plan: 30 days only' },
   { icon: '✏️', label: 'Manual planning mode', sub: 'Pick topics day-by-day' },
   { icon: '🎨', label: 'All themes', sub: 'Unlock every colour theme' },
+  { icon: '📊', label: 'Analytics & progress', sub: 'Track trends and most improved' },
   { icon: '📝', label: 'Topic notes', sub: 'Attach notes to any topic' },
 ];
 
@@ -242,7 +242,7 @@ export default function PaywallScreen() {
         </View>
         <Text style={styles.title}>Revise smarter.{'\n'}Nail every exam.</Text>
         <Text style={styles.subtitle}>
-          Unlock everything — unlimited subjects, longer plans, and all themes.
+          Unlock longer plans, manual scheduling, analytics, and all themes.
         </Text>
       </View>
 

@@ -18,9 +18,6 @@ import {
 } from '../../data/gcseTopicCatalog';
 import { TILE_PALETTE } from '../../constants/palette';
 import {
-  usePlus,
-  FREE_SUBJECT_LIMIT_GCSE,
-  FREE_SUBJECT_LIMIT_ALEVEL,
   MAX_SUBJECTS_GCSE,
   MAX_SUBJECTS_ALEVEL,
   WARN_SUBJECTS_GCSE,
@@ -38,8 +35,6 @@ const DEFAULT_PROVIDER_COLOR = { bg: '#F4F4F6', text: '#3C3C43' };
 
 export default function OnboardingSubjectsScreen({ navigation, route }: Props) {
   const { examLevel } = route.params;
-  const { isPlus } = usePlus();
-
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const isGCSE = examLevel === 'GCSE';
 
@@ -61,8 +56,7 @@ export default function OnboardingSubjectsScreen({ navigation, route }: Props) {
     return map;
   }, [allSubjectNames]);
 
-  const freeLimit = isGCSE ? FREE_SUBJECT_LIMIT_GCSE : FREE_SUBJECT_LIMIT_ALEVEL;
-  const hardCap   = isGCSE ? MAX_SUBJECTS_GCSE : MAX_SUBJECTS_ALEVEL;
+  const hardCap = isGCSE ? MAX_SUBJECTS_GCSE : MAX_SUBJECTS_ALEVEL;
 
   const toggle = (name: string) => {
     setSelected((prev) => {
@@ -91,18 +85,6 @@ export default function OnboardingSubjectsScreen({ navigation, route }: Props) {
           `Most students study 8–12 GCSEs. Selecting more than ${WARN_SUBJECTS_GCSE} is highly unusual — make sure these are all exams you're actually sitting.`,
           [{ text: 'Got it' }],
         );
-      }
-
-      // Plus gate (free limit)
-      if (!isPlus && next.size >= freeLimit) {
-        Alert.alert(
-          isGCSE ? `Free plan: up to ${freeLimit} subjects` : 'Plus required',
-          isGCSE
-            ? `Upgrade to NailExams Plus for unlimited subjects — you can do this from Settings after setup.`
-            : `A Level students on the free plan can track 1 subject. Upgrade to Plus to add more.`,
-          [{ text: 'OK' }],
-        );
-        return prev;
       }
 
       next.add(name);
@@ -223,13 +205,6 @@ export default function OnboardingSubjectsScreen({ navigation, route }: Props) {
 
       {/* Sticky footer */}
       <View style={styles.footer}>
-        {!isPlus && (
-          <Text style={styles.limitHint}>
-            {selected.size >= freeLimit
-              ? `${freeLimit} subject${freeLimit !== 1 ? 's' : ''} selected · upgrade for more ✦`
-              : `Free plan · ${freeLimit - selected.size} slot${freeLimit - selected.size !== 1 ? 's' : ''} remaining`}
-          </Text>
-        )}
         {isGCSE && selected.size >= WARN_SUBJECTS_GCSE && (
           <Text style={[styles.limitHint, { color: '#EF9F27' }]}>
             ⚠️ {selected.size} subjects selected — that's a lot for one student

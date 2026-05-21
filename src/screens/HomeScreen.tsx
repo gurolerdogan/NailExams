@@ -17,7 +17,7 @@ import { usePlus } from '../context/PlusContext';
 import { loadPlan } from '../services/storage/planStorage';
 import { loadTopics } from '../services/storage/nailexamsStorage';
 import { loadAttempts } from '../services/storage/practiceStorage';
-import { loadWeeklyGoal, type WeeklyGoal } from '../services/storage/weeklyGoalStorage';
+import { loadPlanConfig } from '../services/storage/planStorage';
 import { computeStreak } from '../utils/streak';
 import { maybePromptOnStreak } from '../utils/reviewPrompt';
 import type { WeeklyPlan } from '../types/plan';
@@ -296,11 +296,11 @@ export default function HomeScreen() {
     [],
   );
 
-  const [mode, setMode] = useState<HomeMode>('subjects');
+  const [mode, setMode] = useState<HomeMode>('plan');
   const [plan, setPlan] = useState<WeeklyPlan | null>(null);
   const [allTopics, setAllTopics] = useState<Topic[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>(toISODate(new Date()));
-  const [weeklyGoal, setWeeklyGoal] = useState<WeeklyGoal | null>(null);
+  const [weeklyGoal, setWeeklyGoal] = useState<number | null>(null);
   const [weekCheckins, setWeekCheckins] = useState(0);
 
   const streak = useMemo(() => {
@@ -311,17 +311,19 @@ export default function HomeScreen() {
 
   const load = useCallback(async () => {
     await refreshUserData();
-    const [p, t, attempts, goal] = await Promise.all([
-      loadPlan(), loadTopics(), loadAttempts(), loadWeeklyGoal(),
+    const [p, t, attempts, config] = await Promise.all([
+      loadPlan(), loadTopics(), loadAttempts(), loadPlanConfig(),
     ]);
     setPlan(p);
     setAllTopics(t);
-    setWeeklyGoal(goal);
-    // Count check-ins since Monday 00:00
-    const monday = new Date(); monday.setHours(0,0,0,0);
+    // Derived weekly goal: topics/day × selected study days
+    const derived = config.topicsPerDay * (config.studyDays?.length ?? 5);
+    setWeeklyGoal(derived > 0 ? derived : null);
+    // Count unique topics checked in since Monday 00:00
+    const monday = new Date(); monday.setHours(0, 0, 0, 0);
     monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
-    const weekAttempts = attempts.filter((a) => a.ts >= monday.getTime());
-    const uniqueTopics = new Set(weekAttempts.map((a) => a.topicId));
+    const weekAttempts = attempts.filter((a: { ts: number }) => a.ts >= monday.getTime());
+    const uniqueTopics = new Set(weekAttempts.map((a: { topicId: string }) => a.topicId));
     setWeekCheckins(uniqueTopics.size);
   }, [refreshUserData]);
 
@@ -559,19 +561,19 @@ export default function HomeScreen() {
 
       <View style={styles.pillSwitcher}>
         <Pressable
-          style={[styles.pill, mode === 'subjects' && styles.pillActive]}
-          onPress={() => setMode('subjects')}
-        >
-          <Text style={[styles.pillText, mode === 'subjects' && styles.pillTextActive]}>
-            Subjects
-          </Text>
-        </Pressable>
-        <Pressable
           style={[styles.pill, mode === 'plan' && styles.pillActive]}
           onPress={() => setMode('plan')}
         >
           <Text style={[styles.pillText, mode === 'plan' && styles.pillTextActive]}>
             Study plan
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[styles.pill, mode === 'subjects' && styles.pillActive]}
+          onPress={() => setMode('subjects')}
+        >
+          <Text style={[styles.pillText, mode === 'subjects' && styles.pillTextActive]}>
+            Subjects
           </Text>
         </Pressable>
       </View>
@@ -711,7 +713,7 @@ export default function HomeScreen() {
             <EmptyState
               icon="calendar-outline"
               title="No study plan yet"
-              body="Set up your plan in Plan Settings to schedule your revision sessions."
+              body={"Set up your plan in Plan Settings to get scheduled revision sessions — or browse your subjects and check in freely on any topic."}
               cta="Set up plan"
               onCta={() => tabNav.navigate('Settings', { screen: 'PlanSettings' })}
             />

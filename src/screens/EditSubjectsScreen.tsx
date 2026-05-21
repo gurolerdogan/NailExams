@@ -14,9 +14,6 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import {
-  usePlus,
-  FREE_SUBJECT_LIMIT_GCSE,
-  FREE_SUBJECT_LIMIT_ALEVEL,
   MAX_SUBJECTS_GCSE,
   MAX_SUBJECTS_ALEVEL,
   WARN_SUBJECTS_GCSE,
@@ -170,7 +167,7 @@ function createStyles(theme: Theme) {
 export default function EditSubjectsScreen({ navigation }: Props) {
   const { profile, subjects, refreshUserData } = useAuth();
   const { theme } = useTheme();
-  const { isPlus } = usePlus();
+
   const level = profile?.examLevel;
   const presets = useMemo(() => (level ? presetsFor(level) : []), [level]);
 
@@ -197,8 +194,7 @@ export default function EditSubjectsScreen({ navigation }: Props) {
   }
 
   const isGCSE    = level === 'GCSE';
-  const freeLimit = isGCSE ? FREE_SUBJECT_LIMIT_GCSE   : FREE_SUBJECT_LIMIT_ALEVEL;
-  const hardCap   = isGCSE ? MAX_SUBJECTS_GCSE          : MAX_SUBJECTS_ALEVEL;
+  const hardCap = isGCSE ? MAX_SUBJECTS_GCSE : MAX_SUBJECTS_ALEVEL;
 
   const toggle = (name: string) => {
     setSelected((prev) => {
@@ -250,20 +246,6 @@ export default function EditSubjectsScreen({ navigation }: Props) {
       Alert.alert('Select at least 1 subject');
       return;
     }
-    if (!isPlus && selected.size > freeLimit) {
-      Alert.alert(
-        'Plus required',
-        isGCSE
-          ? `Free accounts are limited to ${freeLimit} subjects. Upgrade to NailExams Plus for unlimited subjects.`
-          : `Free accounts can track 1 A Level subject. Upgrade to Plus to add more.`,
-        [
-          { text: 'Not now', style: 'cancel' },
-          { text: 'Upgrade', onPress: () => navigation.navigate('Paywall') },
-        ],
-      );
-      return;
-    }
-
     // Block removal of any subject that has sessions in the active plan
     const removedSubjects = subjects.filter((s) => !selected.has(s.name));
     if (removedSubjects.length > 0) {

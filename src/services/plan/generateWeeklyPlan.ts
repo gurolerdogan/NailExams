@@ -39,6 +39,11 @@ function topicSortKey(t: Topic): number {
   return base - overdueBoost;
 }
 
+/** Converts a JS Date to Mon=0…Sun=6 */
+function dayOfWeekMon(d: Date): number {
+  return (d.getDay() + 6) % 7;
+}
+
 export function generatePlan(params: {
   subjects: Subject[];
   topics: Topic[];
@@ -46,6 +51,7 @@ export function generatePlan(params: {
 }): WeeklyPlan {
   const { subjects, topics, config } = params;
   const { durationDays, subjectIds, topicsPerDay, topicOrder } = config;
+  const studyDaySet = new Set(config.studyDays ?? [0, 1, 2, 3, 4]);
 
   const ts = now();
   const today = new Date();
@@ -73,6 +79,7 @@ export function generatePlan(params: {
     outer: for (let day = 0; day < durationDays; day++) {
       const date = new Date(today);
       date.setDate(today.getDate() + day);
+      if (!studyDaySet.has(dayOfWeekMon(date))) continue; // skip non-study days
       const dateISO = toISODate(date);
 
       for (let slot = 0; slot < topicsPerDay; slot++) {
@@ -95,10 +102,10 @@ export function generatePlan(params: {
     outer: for (let day = 0; day < durationDays; day++) {
       const date = new Date(today);
       date.setDate(today.getDate() + day);
+      if (!studyDaySet.has(dayOfWeekMon(date))) continue; // skip non-study days
       const dateISO = toISODate(date);
 
       for (let slot = 0; slot < topicsPerDay; slot++) {
-        // Find next non-exhausted queue, cycling from globalSlot
         let picked = false;
         for (let attempt = 0; attempt < numSubjects; attempt++) {
           const qi = (globalSlot + attempt) % numSubjects;
@@ -111,7 +118,7 @@ export function generatePlan(params: {
             break;
           }
         }
-        if (!picked) break outer; // all queues exhausted
+        if (!picked) break outer;
       }
     }
   }

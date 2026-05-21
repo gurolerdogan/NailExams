@@ -9,7 +9,9 @@ import {
   getOnboardingDone,
   loadProfile,
   loadSubjects,
+  migrateToUserScope,
 } from '../services/storage/nailexamsStorage';
+import { setActiveUserId } from '../services/storage/userScope';
 import type { Subject, UserProfile } from '../types/models';
 
 type AuthState = {
@@ -67,10 +69,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(u ?? null);
 
         if (u) {
+          setActiveUserId(u.uid);
+          await migrateToUserScope(u.uid);
           identifyUser(u.uid, u.email ?? undefined);
           await ensureStorageVersion();
           await Promise.all([refreshOnboarding(), refreshUserData()]);
         } else {
+          setActiveUserId(null);
           resetAnalyticsUser();
           setOnboardingComplete(false);
           setProfile(null);

@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   Pressable,
   ScrollView,
   Share,
@@ -16,10 +15,9 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import type { Topic } from '../types/models';
 import type { WeeklyPlan } from '../types/plan';
-import { loadPlan, clearPlan } from '../services/storage/planStorage';
+import { loadPlan } from '../services/storage/planStorage';
 import { loadTopics } from '../services/storage/nailexamsStorage';
 import { computeStreak } from '../utils/streak';
-import { logEvent } from '../services/logging/logEvent';
 import type { AppTabParamList } from '../navigation/TabNavigator';
 import EmptyState from '../components/EmptyState';
 import { TILE_PALETTE } from '../constants/palette';
@@ -71,9 +69,6 @@ function createStyles(theme: Theme) {
       marginBottom: 16,
     },
     screenSub: { flex: 1, fontSize: 12, color: theme.colors.textSecondary },
-    headerActions: { flexDirection: 'row', gap: 12 },
-    headerActionBtn: { paddingVertical: 2 },
-    headerActionText: { fontSize: 12, fontWeight: '500', color: '#185FA5' },
 
     // Summary row
     summaryRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
@@ -328,27 +323,6 @@ export default function PlanScreen() {
     tabNav.navigate('Settings', { screen: 'PlanSettings' });
   }, [tabNav]);
 
-  const onRegenerate = () => {
-    Alert.alert('Edit plan?', 'Go to Plan Settings to change your plan configuration and regenerate.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Go to Plan Settings', onPress: goToPlanSettings },
-    ]);
-  };
-
-  const onClear = () => {
-    Alert.alert('Clear plan?', 'This removes the plan from local storage.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Clear',
-        style: 'destructive',
-        onPress: async () => {
-          await clearPlan();
-          setPlan(null);
-          await logEvent('plan_cleared', {});
-        },
-      },
-    ]);
-  };
 
   const shareDayProgress = useCallback(async (
     dayLabel: string,
@@ -645,16 +619,6 @@ export default function PlanScreen() {
           {MONTH_NAMES[calMonth]} {calYear}
           {plan ? ` · ${checkedInCount} of ${totalCount} checked in` : ''}
         </Text>
-        {plan && (
-          <View style={styles.headerActions}>
-            <Pressable onPress={onRegenerate} style={styles.headerActionBtn}>
-              <Text style={styles.headerActionText}>Regenerate</Text>
-            </Pressable>
-            <Pressable onPress={onClear} style={styles.headerActionBtn}>
-              <Text style={[styles.headerActionText, { color: '#E24B4A' }]}>Clear</Text>
-            </Pressable>
-          </View>
-        )}
       </View>
 
       {!plan ? (
