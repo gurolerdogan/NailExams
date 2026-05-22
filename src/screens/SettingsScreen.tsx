@@ -559,7 +559,7 @@ export default function SettingsScreen({ navigation }: Props) {
         />
       </View>
 
-      <Text style={styles.versionText}>NailExams · v1.0</Text>
+      <Text style={styles.versionText}>NailExams · v1.6</Text>
     </ScrollView>
 
     {/* ── Reminder time picker modal ── */}

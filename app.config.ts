@@ -8,7 +8,7 @@ export default (): ExpoConfig => {
     name: 'NailExams',
     slug: 'nailexams',
     scheme: 'nailexams',
-    version: '1.0.0',
+    version: '1.6.0',
     // App Store support & privacy URLs (GitHub Pages)
     // Enable: Repo Settings → Pages → Deploy from branch → main / docs
     // URL: https://gurolerdogan.github.io/NailExams/
@@ -35,7 +35,7 @@ export default (): ExpoConfig => {
     },
     ios: {
       bundleIdentifier: 'com.gurolerdogan.nailexams',
-      buildNumber: '1',
+      buildNumber: '6',
       supportsTablet: false,
       usesAppleSignIn: true,
       googleServicesFile: './GoogleService-Info.plist',
@@ -46,7 +46,7 @@ export default (): ExpoConfig => {
     },
     android: {
       package: 'com.gurolerdogan.nailexams',
-      versionCode: 1,
+      versionCode: 6,
       googleServicesFile: './google-services.json',   // ← add this
       adaptiveIcon: {
         foregroundImage: './assets/adaptive-icon.png',

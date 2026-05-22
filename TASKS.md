@@ -6,6 +6,9 @@
 
 ## Blocking — must ship before release
 
+### 0. Dev streak override — revert before release
+- `src/screens/HomeScreen.tsx` — remove `__DEV__ ? Math.max(real, 5) : real` from streak useMemo
+
 ### 1. RevenueCat Android key
 **File:** `src/services/purchases/purchasesService.ts`
 - Replace `RC_API_KEY_ANDROID = 'goog_REPLACE_WITH_YOUR_ANDROID_KEY'`
@@ -60,13 +63,17 @@
 
 ## Done ✓
 
-**Pillar 1 — Smarter plans**
+**Pillar 3 — Engagement (v1.6)**
+- ✅ 3.1 Milestone badges — 19 badges (Bronze/Silver/Gold/Special/Hidden); `badgeService.ts` derives all from existing storage; `BadgesScreen` grid view; badge toast in PracticeScreen after celebration; "Share badge" button (Plus); Settings → Achievements
+- ✅ 3.2 Richer share cards — `TopicNailedCard` (journey line), `SubjectClearedCard` (domain bars), `BadgeUnlockCard`; `shareCard.ts` shared helper; share button on celebration overlay (Plus only); `NE_PROGRESS_SHARED` flag unlocks `progress_shared` badge
+
+**Pillar 1 — Smarter plans (v1.6)**
 - ✅ 1.1 Topic weight & time estimates — `src/utils/catalog.ts` (keyword-based weight 1/2/3, 15/25/40 min defaults); plan generator uses weight multiplier + one-heavy-per-day rule; PlanScreen session cards show weight dots (●●○) + `~Xmin`
 - ✅ 1.2 Exam-pressure mode — plan generator computes phase per subject (normal/crunch/final) from `examDates`; crunch tiles get amber border, final-push tiles get red border on HomeScreen; final-push suppresses well-known topics
 - ✅ 1.3 Subject balance warnings — `src/utils/balance.ts`; HomeScreen shows contextual nudge for neglected subjects (9+ days), weekly skew (≥60% one subject), or single-subject runs; dismissable (in-memory)
 - ✅ 1.4 Weak-topic fast lane — `src/utils/fastLane.ts`; detects stuck topics (≥2 check-ins in 14 days, peak conf ≤2); 3× priority boost in plan generator; burnout rest after 4 failed sessions; 🚨 rescue badge in PracticeScreen topic rows
 
-**Pillar 2 — Study efficiency**
+**Pillar 2 — Study efficiency (v1.6)**
 - ✅ 2.1 Focus timer — `src/utils/sessionTimer.ts`; 3-state sheet in PracticeScreen (idle → running → checkin); duration from catalog weight; pauses on app background; "skip timer" always available
 - ✅ 2.2 Revision strategy tips — `src/notifications/revisionTips.ts`; 18 tips across 3 categories (conf 1–2, conf 3–4, fast-lane); deterministic per (topicId, confidence, fastLane) — same tip each session until confidence improves
 - ✅ 2.3 Pre-session intention — `src/utils/intentionPlaceholders.ts`; keyword→placeholder lookup (~18 entries); intention shown during session, pre-filled into note at check-in as `"Goal: ..."`

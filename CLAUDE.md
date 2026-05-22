@@ -1,7 +1,7 @@
 # NailExams — Project Context for Claude
 
 > Read this at the start of every session. Always read current file contents before editing.
-> Repo: `github.com/gurolerdogan/NailExams` (public) · active branch: `develop`
+> Repo: `github.com/gurolerdogan/NailExams` (public) · active branch: `develop` · **current version: 1.6.0**
 
 ---
 
@@ -95,6 +95,17 @@ src/
   notifications/
     messages.ts           # PLAN_REMINDERS, GENERIC_REMINDERS, STREAK_NUDGES, WEEKLY_SUMMARY
     revisionTips.ts       # getTipForSession(confidence, isFastLane, topicId) → string
+  types/
+    badges.ts         # BadgeId union, BadgeTier, BadgeDefinition, BADGE_CATALOG, BADGE_BY_ID
+  services/
+    badges/
+      badgeService.ts # computeEarnedBadges(), checkForNewBadges(), markBadgesSeen(), markProgressShared()
+  components/
+    share/
+      shareCard.ts          # shared ViewShot + Share.share() helper
+      TopicNailedCard.tsx   # confidence-5 branded share card
+      SubjectClearedCard.tsx# subject cleared branded share card
+      BadgeUnlockCard.tsx   # badge unlock branded share card
   themes/
     index.ts          # THEME_REGISTRY: [default, softFocus, teenEnergy(Neon), darkTerminal]
     default.ts / softFocus.ts / teenEnergy.ts / darkTerminal.ts / types.ts
@@ -203,6 +214,7 @@ NE_PROFILE_V1       NE_SUBJECTS_V1      NE_TOPICS_V1
 NE_ONBOARDING_DONE  NE_STORAGE_VERSION  NE_LOGS_V1
 NE_ATTEMPTS_V1      NE_PLAN_V1          NE_PLAN_SETTINGS_V1
 NE_NOTIF_SETTINGS_V1   NE_REVIEW_PROMPTED   NE_WEEKLY_GOAL_V1 (deprecated — no longer written)
+NE_BADGES_SEEN_V1   NE_PROGRESS_SHARED
 ```
 
 `NE_PLAN_SETTINGS_V1` stores `PlanConfig` including `studyDays`. Weekly goal is derived at runtime as `topicsPerDay × studyDays.length` — not stored separately.
