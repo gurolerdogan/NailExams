@@ -87,8 +87,14 @@ src/
     time.ts           # now()
     streak.ts         # computeStreak(sessions) — shared by HomeScreen + PlanScreen
     reviewPrompt.ts   # maybePromptOnStreak(streak), maybePromptOnNailedIt(conf, total)
+    catalog.ts        # getTopicWeight(name) → 1|2|3, getEstimatedMinutes(name) → number
+    fastLane.ts       # computeFastLane(), getActiveFastLaneIds() — detects stuck topics
+    balance.ts        # computeBalanceWarning() — neglected/skewed subject detection
+    sessionTimer.ts   # useSessionTimer(durationSeconds) hook, formatTime()
+    intentionPlaceholders.ts  # getIntentionPlaceholder(topicName) → string
   notifications/
-    messages.ts       # PLAN_REMINDERS, GENERIC_REMINDERS, STREAK_NUDGES, WEEKLY_SUMMARY
+    messages.ts           # PLAN_REMINDERS, GENERIC_REMINDERS, STREAK_NUDGES, WEEKLY_SUMMARY
+    revisionTips.ts       # getTipForSession(confidence, isFastLane, topicId) → string
   themes/
     index.ts          # THEME_REGISTRY: [default, softFocus, teenEnergy(Neon), darkTerminal]
     default.ts / softFocus.ts / teenEnergy.ts / darkTerminal.ts / types.ts
@@ -109,6 +115,7 @@ Topic = { id, subjectId, name, confidence?: 0|1|2|3|4|5, lastPracticedAt?, creat
 // plan.ts
 PlanConfig   = { durationDays: 30|60|90, subjectIds, topicsPerDay: 1|2|3|4, topicOrder, studyDays: number[] }
                // studyDays: Mon=0 … Sun=6, default [0,1,2,3,4] (Mon–Fri)
+               // generatePlan() also accepts: attempts?, examDates? for fast-lane + pressure mode
 PlanSession = { id, date, subjectId, topicId, title, status: 'PLANNED'|'DONE', createdAt, updatedAt }
 WeeklyPlan   = { id, weekStart, sessionsPerDay, sessions, createdAt, updatedAt, ... }
 

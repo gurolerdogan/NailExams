@@ -20,6 +20,7 @@ import { useTheme } from '../context/ThemeContext';
 import { usePlus } from '../context/PlusContext';
 import { loadTopics } from '../services/storage/nailexamsStorage';
 import { loadPlanConfig, savePlanConfig, savePlan, loadPlan } from '../services/storage/planStorage';
+import { loadAttempts } from '../services/storage/practiceStorage';
 import { generatePlan } from '../services/plan/generateWeeklyPlan';
 import { logEvent } from '../services/logging/logEvent';
 import { uuid } from '../utils/id';
@@ -256,7 +257,7 @@ function createStyles(theme: Theme) {
 type PlanMode = 'auto' | 'manual';
 
 export default function PlanSettingsScreen() {
-  const { subjects } = useAuth();
+  const { subjects, profile } = useAuth();
   const { theme } = useTheme();
   const { isPlus } = usePlus();
   const tabNav = useNavigation<BottomTabNavigationProp<AppTabParamList>>();
@@ -431,7 +432,8 @@ export default function PlanSettingsScreen() {
     try {
       setBusy(true);
       await savePlanConfig(config);
-      const plan = generatePlan({ subjects, topics, config });
+      const attempts = await loadAttempts();
+      const plan = generatePlan({ subjects, topics, config, attempts, examDates: profile?.examDates ?? [] });
       await savePlan(plan);
       await logEvent('plan_generated', {
         durationDays: config.durationDays,

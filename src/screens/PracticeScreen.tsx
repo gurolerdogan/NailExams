@@ -28,6 +28,11 @@ import { logEvent } from '../services/logging/logEvent';
 import { PAST_PAPER_LINKS } from '../data/pastPaperLinks';
 import { Linking } from 'react-native';
 import { maybePromptOnNailedIt } from '../utils/reviewPrompt';
+import { getActiveFastLaneIds } from '../utils/fastLane';
+import { useSessionTimer, formatTime } from '../utils/sessionTimer';
+import { getEstimatedMinutes } from '../utils/catalog';
+import { getTipForSession } from '../notifications/revisionTips';
+import { getIntentionPlaceholder } from '../utils/intentionPlaceholders';
 import type { AppTabParamList } from '../navigation/TabNavigator';
 import EmptyState from '../components/EmptyState';
 import { TILE_PALETTE } from '../constants/palette';
@@ -319,6 +324,13 @@ export default function PracticeScreen() {
     link?: string;
   } | null>(null);
 
+  const [intention, setIntention] = useState('');
+  // 'idle' = pre-session, 'running'/'paused'/'done' = timer states, 'checkin' = rate confidence
+  const [sheetPhase, setSheetPhase] = useState<'idle' | 'running' | 'paused' | 'done' | 'checkin'>('idle');
+
+  const timerDuration = sheetTopic ? getEstimatedMinutes(sheetTopic.name) * 60 : 25 * 60;
+  const timer = useSessionTimer(timerDuration);
+
   const slideAnim       = useRef(new Animated.Value(300)).current;
   const celebrationAnim = useRef(new Animated.Value(0)).current;
 
@@ -339,6 +351,9 @@ export default function PracticeScreen() {
       : null;
     setConfidence(existing);
     setNote(lastNoteByTopicRef.current.get(topic.id) ?? '');
+    setIntention('');
+    setSheetPhase('idle');
+    timer.reset();
     setSheetVisible(true);
     Animated.spring(slideAnim, {
       toValue: 0,
@@ -359,10 +374,13 @@ export default function PracticeScreen() {
     });
   }, [slideAnim]);
 
+  const [fastLaneIds, setFastLaneIds] = useState<Set<string>>(new Set());
+
   // ── Load topics + attempts ────────────────────────────────────────────────────
   const refreshTopics = useCallback(async () => {
     const [data, attempts] = await Promise.all([loadTopics(), loadAttempts()]);
     setAllTopics(data);
+    setFastLaneIds(getActiveFastLaneIds(data, attempts));
     // Build a map of topicId → most recent note (attempts are stored oldest→newest)
     const noteMap = new Map<string, string>();
     for (const a of attempts) {
@@ -406,6 +424,11 @@ export default function PracticeScreen() {
       openedFromPlanRef.current = true; // mark as plan-link open AFTER openSheet resets it
     }
   }, [topicIdFromNav, allTopics, openSheet]);
+
+  // Advance to check-in phase when timer finishes
+  useEffect(() => {
+    if (timer.phase === 'done') setSheetPhase('checkin');
+  }, [timer.phase]);
 
   // ── Derived data ──────────────────────────────────────────────────────────────
   const subjectStats = useMemo(() => {
@@ -707,14 +730,27 @@ export default function PracticeScreen() {
                           : item.name.slice(colonIdx + 2);
                         const isLast     = idx === topics.length - 1;
 
+                        const isFastLane = fastLaneIds.has(item.id);
+
                         return (
                           <Pressable
                             key={item.id}
-                            style={[styles.topicRow, isLast && styles.topicRowLast]}
+                            style={[
+                              styles.topicRow,
+                              isLast && styles.topicRowLast,
+                              isFastLane && { borderLeftWidth: 3, borderLeftColor: '#E24B4A', paddingLeft: 10 },
+                            ]}
                             onPress={() => openSheet(item)}
                           >
                             <View style={{ flex: 1 }}>
-                              <Text style={styles.topicName}>{shortName}</Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                                {isFastLane && (
+                                  <Text style={{ fontSize: 11 }}>🚨</Text>
+                                )}
+                                <Text style={[styles.topicName, isFastLane && { color: '#A32D2D' }]} numberOfLines={1}>
+                                  {shortName}
+                                </Text>
+                              </View>
                               {isCheckedIn && item.lastPracticedAt ? (
                                 <Text style={styles.topicMeta}>
                                   Last: {new Date(item.lastPracticedAt).toLocaleDateString()}
@@ -779,75 +815,167 @@ export default function PracticeScreen() {
           </Text>
           <Text style={styles.sheetSubject}>{selectedSubject?.name}</Text>
 
-          {sheetTopic?.lastPracticedAt ? (
-            <Text style={styles.sheetLastCheckin}>
-              Last checked in: {new Date(sheetTopic.lastPracticedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
-            </Text>
-          ) : (
-            <Text style={styles.sheetLastCheckin}>Not checked in yet</Text>
+          {/* ── STATE 1: Pre-session (intention + start timer) ── */}
+          {sheetPhase === 'idle' && sheetTopic && (
+            <>
+              {sheetTopic.lastPracticedAt ? (
+                <Text style={styles.sheetLastCheckin}>
+                  Last checked in: {new Date(sheetTopic.lastPracticedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
+                </Text>
+              ) : (
+                <Text style={styles.sheetLastCheckin}>Not checked in yet</Text>
+              )}
+
+              <Text style={styles.sheetLabel}>What's your goal for this session?</Text>
+              <TextInput
+                value={intention}
+                onChangeText={setIntention}
+                placeholder={getIntentionPlaceholder(sheetTopic.name)}
+                placeholderTextColor={theme.colors.textMuted}
+                style={[styles.noteInput, { marginBottom: 12 }]}
+                multiline={false}
+              />
+
+              <Pressable
+                style={styles.saveBtn}
+                onPress={() => {
+                  if (intention.trim()) setNote(`Goal: ${intention.trim()}`);
+                  setSheetPhase('running');
+                  timer.start();
+                }}
+              >
+                <Text style={styles.saveBtnText}>
+                  Start {Math.round(timerDuration / 60)}-min session
+                </Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => setSheetPhase('checkin')}
+                style={{ alignItems: 'center', paddingVertical: 10 }}
+              >
+                <Text style={{ fontSize: 12, color: theme.colors.textMuted, textDecorationLine: 'underline' }}>
+                  skip timer and check in now
+                </Text>
+              </Pressable>
+            </>
           )}
 
-          <Text style={styles.sheetLabel}>How confident are you?</Text>
-          <View style={styles.confSelector}>
-            {([1, 2, 3, 4, 5] as const).map((v) => {
-              const selected = confidence === v;
-              return (
+          {/* ── STATE 2: Session in progress ── */}
+          {(sheetPhase === 'running' || sheetPhase === 'paused') && sheetTopic && (
+            <>
+              {intention.trim() ? (
+                <Text style={[styles.sheetLastCheckin, { fontStyle: 'italic' }]}>"{intention}"</Text>
+              ) : null}
+
+              {/* Timer block */}
+              <View style={{
+                backgroundColor: '#E1F5EE', borderRadius: 12,
+                padding: 14, marginBottom: 10,
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+              }}>
+                <View>
+                  <Text style={{ fontFamily: 'monospace', fontSize: 28, fontWeight: '500', color: '#085041' }}>
+                    {formatTime(timer.remainingSeconds)}
+                  </Text>
+                  <Text style={{ fontSize: 10, color: '#085041', opacity: 0.7 }}>
+                    {sheetPhase === 'paused' ? 'paused' : 'remaining'}
+                  </Text>
+                </View>
                 <Pressable
-                  key={v}
-                  style={[
-                    styles.confBtn,
-                    selected && {
-                      backgroundColor: CONF_BAR_COLORS[v - 1],
-                      borderColor: CONF_BAR_COLORS[v - 1],
-                    },
-                  ]}
-                  onPress={() => setConfidence(v)}
+                  onPress={() => {
+                    if (sheetPhase === 'running') { timer.pause(); setSheetPhase('paused'); }
+                    else { timer.resume(); setSheetPhase('running'); }
+                  }}
+                  style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: '#1D9E75', alignItems: 'center', justifyContent: 'center' }}
                 >
-                  <Text style={[styles.confBtnText, selected && { color: '#FFF' }]}>
-                    {v}
+                  <Text style={{ color: '#FFF', fontSize: 14 }}>{sheetPhase === 'running' ? '⏸' : '▶'}</Text>
+                </Pressable>
+              </View>
+
+              {/* Revision tip */}
+              <View style={{ backgroundColor: '#FAEEDA', borderRadius: 10, padding: 12, marginBottom: 12, flexDirection: 'row', gap: 8 }}>
+                <Text style={{ fontSize: 14, flexShrink: 0 }}>💡</Text>
+                <Text style={{ fontSize: 12, color: '#633806', lineHeight: 18, flex: 1 }}>
+                  {getTipForSession(sheetTopic.confidence ?? 0, fastLaneIds.has(sheetTopic.id), sheetTopic.id)}
+                </Text>
+              </View>
+
+              <Text style={{ fontSize: 10, color: theme.colors.textMuted, textAlign: 'center', marginBottom: 8 }}>
+                Timer pauses if you leave the app
+              </Text>
+
+              <Pressable
+                onPress={() => { timer.reset(); setSheetPhase('checkin'); }}
+                style={{ alignItems: 'center', paddingVertical: 8 }}
+              >
+                <Text style={{ fontSize: 12, color: theme.colors.textMuted, textDecorationLine: 'underline' }}>
+                  skip to check in
+                </Text>
+              </Pressable>
+            </>
+          )}
+
+          {/* ── STATE 3: Check-in (confidence rating) ── */}
+          {(sheetPhase === 'checkin' || sheetPhase === 'done') && sheetTopic && (
+            <>
+              {sheetPhase === 'done' && (
+                <Text style={{ fontSize: 13, color: '#1D9E75', fontWeight: '600', marginBottom: 8 }}>
+                  Session done · {Math.round(timerDuration / 60)} min
+                </Text>
+              )}
+
+              <Text style={styles.sheetLabel}>How confident are you?</Text>
+              <View style={styles.confSelector}>
+                {([1, 2, 3, 4, 5] as const).map((v) => {
+                  const selected = confidence === v;
+                  return (
+                    <Pressable
+                      key={v}
+                      style={[
+                        styles.confBtn,
+                        selected && { backgroundColor: CONF_BAR_COLORS[v - 1], borderColor: CONF_BAR_COLORS[v - 1] },
+                      ]}
+                      onPress={() => setConfidence(v)}
+                    >
+                      <Text style={[styles.confBtnText, selected && { color: '#FFF' }]}>{v}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <Text style={styles.sheetLabel}>Note (optional)</Text>
+              <TextInput
+                value={note}
+                onChangeText={setNote}
+                placeholder="What did you struggle with?"
+                placeholderTextColor={theme.colors.textMuted}
+                style={styles.noteInput}
+                multiline
+                editable={!busy}
+              />
+
+              {selectedSubject && PAST_PAPER_LINKS[selectedSubject.name] && (
+                <Pressable
+                  onPress={() => void Linking.openURL(PAST_PAPER_LINKS[selectedSubject!.name])}
+                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, marginBottom: 8 }}
+                >
+                  <Text style={{ fontSize: 13, color: theme.colors.accent, fontWeight: '600' }}>
+                    Find past questions →
                   </Text>
                 </Pressable>
-              );
-            })}
-          </View>
+              )}
 
-          <Text style={styles.sheetLabel}>Note (optional)</Text>
-          <TextInput
-            value={note}
-            onChangeText={setNote}
-            placeholder="What did you struggle with?"
-            placeholderTextColor={theme.colors.textMuted}
-            style={styles.noteInput}
-            multiline
-            editable={!busy}
-          />
-
-          {selectedSubject && PAST_PAPER_LINKS[selectedSubject.name] && (
-            <Pressable
-              onPress={() => void Linking.openURL(PAST_PAPER_LINKS[selectedSubject!.name])}
-              style={{
-                flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-                gap: 6, paddingVertical: 10, marginBottom: 8,
-              }}
-            >
-              <Text style={{ fontSize: 13, color: theme.colors.accent, fontWeight: '600' }}>
-                Find past questions →
-              </Text>
-            </Pressable>
-          )}
-
-          <Pressable
-            style={[
-              styles.saveBtn,
-              (busy || confidence === null) && { opacity: 0.4 },
-            ]}
-            onPress={submit}
-            disabled={busy || confidence === null}
-          >
-            <Text style={styles.saveBtnText}>{busy ? 'Saving…' : 'Save check-in'}</Text>
-          </Pressable>
-          {confidence === null && (
-            <Text style={styles.saveHint}>Pick a confidence level to save</Text>
+              <Pressable
+                style={[styles.saveBtn, (busy || confidence === null) && { opacity: 0.4 }]}
+                onPress={submit}
+                disabled={busy || confidence === null}
+              >
+                <Text style={styles.saveBtnText}>{busy ? 'Saving…' : 'Save check-in'}</Text>
+              </Pressable>
+              {confidence === null && (
+                <Text style={styles.saveHint}>Pick a confidence level to save</Text>
+              )}
+            </>
           )}
         </Animated.View>
       </KeyboardAvoidingView>

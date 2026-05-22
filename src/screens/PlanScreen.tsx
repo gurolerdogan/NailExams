@@ -18,6 +18,7 @@ import type { WeeklyPlan } from '../types/plan';
 import { loadPlan } from '../services/storage/planStorage';
 import { loadTopics } from '../services/storage/nailexamsStorage';
 import { computeStreak } from '../utils/streak';
+import { getTopicWeight, getEstimatedMinutes } from '../utils/catalog';
 import type { AppTabParamList } from '../navigation/TabNavigator';
 import EmptyState from '../components/EmptyState';
 import { TILE_PALETTE } from '../constants/palette';
@@ -566,6 +567,9 @@ export default function PlanScreen() {
                     const palette = TILE_PALETTE[paletteIdx];
                     const conf = topicConfidence.get(session.topicId) ?? 0;
                     const checkedIn = conf > 0;
+                    const topicName = session.title.split(' — ')[1] ?? session.title;
+                    const weight = getTopicWeight(topicName);
+                    const mins = getEstimatedMinutes(topicName);
 
                     return (
                       <Pressable
@@ -579,14 +583,29 @@ export default function PlanScreen() {
 
                         <View style={{ flex: 1 }}>
                           <Text style={styles.sessionTitle} numberOfLines={2}>{session.title}</Text>
-                          {checkedIn && (
-                            <View style={styles.sessionMetaRow}>
-                              <View style={[styles.confDot, { backgroundColor: CONF_COLORS[conf - 1] }]} />
-                              <Text style={[styles.confLabel, { color: CONF_COLORS[conf - 1] }]}>
-                                {conf}/5
-                              </Text>
+                          <View style={styles.sessionMetaRow}>
+                            {/* Weight dots */}
+                            <View style={{ flexDirection: 'row', gap: 2, alignItems: 'center' }}>
+                              {[1, 2, 3].map((i) => (
+                                <View
+                                  key={i}
+                                  style={{
+                                    width: 5, height: 5, borderRadius: 2.5,
+                                    backgroundColor: i <= weight ? '#EF9F27' : theme.colors.cardBorder,
+                                  }}
+                                />
+                              ))}
                             </View>
-                          )}
+                            <Text style={{ fontSize: 10, color: theme.colors.textMuted }}>~{mins}m</Text>
+                            {checkedIn && (
+                              <>
+                                <View style={[styles.confDot, { backgroundColor: CONF_COLORS[conf - 1] }]} />
+                                <Text style={[styles.confLabel, { color: CONF_COLORS[conf - 1] }]}>
+                                  {conf}/5
+                                </Text>
+                              </>
+                            )}
+                          </View>
                         </View>
 
                         {done ? (

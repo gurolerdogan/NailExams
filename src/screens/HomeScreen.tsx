@@ -20,6 +20,7 @@ import { loadAttempts } from '../services/storage/practiceStorage';
 import { loadPlanConfig } from '../services/storage/planStorage';
 import { computeStreak } from '../utils/streak';
 import { maybePromptOnStreak } from '../utils/reviewPrompt';
+import { computeBalanceWarning } from '../utils/balance';
 import type { WeeklyPlan } from '../types/plan';
 import type { Topic } from '../types/models';
 import type { AppTabParamList } from '../navigation/TabNavigator';
@@ -300,8 +301,10 @@ export default function HomeScreen() {
   const [plan, setPlan] = useState<WeeklyPlan | null>(null);
   const [allTopics, setAllTopics] = useState<Topic[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>(toISODate(new Date()));
-  const [weeklyGoal, setWeeklyGoal] = useState<number | null>(null);
-  const [weekCheckins, setWeekCheckins] = useState(0);
+  const [weeklyGoal, setWeeklyGoal]       = useState<number | null>(null);
+  const [weekCheckins, setWeekCheckins]   = useState(0);
+  const [balanceWarning, setBalanceWarning] = useState<ReturnType<typeof computeBalanceWarning>>(null);
+  const [warnDismissed, setWarnDismissed] = useState(false);
 
   const streak = useMemo(() => {
     const real = plan ? computeStreak(plan.sessions) : 0;
@@ -325,7 +328,10 @@ export default function HomeScreen() {
     const weekAttempts = attempts.filter((a: { ts: number }) => a.ts >= monday.getTime());
     const uniqueTopics = new Set(weekAttempts.map((a: { topicId: string }) => a.topicId));
     setWeekCheckins(uniqueTopics.size);
-  }, [refreshUserData]);
+    // Balance warning — reset dismiss on reload so fresh state is shown
+    setWarnDismissed(false);
+    setBalanceWarning(computeBalanceWarning(subjects, t, attempts, p));
+  }, [refreshUserData, subjects]);
 
   useEffect(() => { void load(); }, [load]);
   useFocusEffect(useCallback(() => { void load(); }, [load]));
@@ -602,14 +608,22 @@ export default function HomeScreen() {
                 const palette  = TILE_PALETTE[idx % TILE_PALETTE.length];
                 const stats    = subjectStats.get(s.id) ?? { bars: [0,0,0,0,0], checkedIn: 0, total: 0 };
                 const examDays = examDaysMap.get(s.id);
-                const examColor = examDays === undefined ? null
-                  : examDays < 14 ? '#E24B4A'
-                  : examDays < 30 ? '#EF9F27'
+                const examPhase = examDays === undefined ? null
+                  : examDays <= 7 ? 'final'
+                  : examDays <= 20 ? 'crunch'
+                  : 'normal';
+                const examColor = examPhase === 'final' ? '#E24B4A'
+                  : examPhase === 'crunch' ? '#EF9F27'
                   : palette.text;
                 return (
                   <Pressable
                     key={s.id}
-                    style={[styles.subjectTile, { backgroundColor: palette.bg }]}
+                    style={[
+                      styles.subjectTile,
+                      { backgroundColor: palette.bg },
+                      examPhase === 'final' && { borderWidth: 2, borderColor: '#E24B4A' },
+                      examPhase === 'crunch' && { borderWidth: 1.5, borderColor: '#EF9F27' },
+                    ]}
                     onPress={() => tabNav.navigate('Practice', { subjectId: s.id, topicId: undefined })}
                   >
                     {/* Exam countdown badge — top-right corner */}
@@ -820,6 +834,39 @@ export default function HomeScreen() {
           )}
         </View>
       )}
+      {/* ── Subject balance warning ── */}
+      {balanceWarning && !warnDismissed && (
+        <Pressable
+          onPress={() => setWarnDismissed(true)}
+          style={{
+            flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+            backgroundColor: balanceWarning.severity === 3 ? '#FAEEDA' : theme.colors.cardBg,
+            borderRadius: 12, padding: 12, marginTop: 8,
+            borderWidth: 1,
+            borderColor: balanceWarning.severity === 3 ? '#EF9F27' : theme.colors.cardBorder,
+          }}
+        >
+          <Text style={{ fontSize: 18 }}>
+            {balanceWarning.type === 'neglected' ? '⚖️' : balanceWarning.type === 'weekly_skew' ? '📊' : '💡'}
+          </Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{
+              fontSize: 13, fontWeight: '600', lineHeight: 18,
+              color: balanceWarning.severity === 3 ? '#633806' : theme.colors.textPrimary,
+            }}>
+              {balanceWarning.message}
+            </Text>
+            <Text style={{
+              fontSize: 11, marginTop: 2,
+              color: balanceWarning.severity === 3 ? '#854D0E' : theme.colors.textMuted,
+            }}>
+              {balanceWarning.detail}
+            </Text>
+          </View>
+          <Text style={{ fontSize: 16, color: theme.colors.textMuted, marginTop: 1 }}>×</Text>
+        </Pressable>
+      )}
+
       {/* ── Plus promo banner — free users only ── */}
       {!isPlus && (
         <Pressable
