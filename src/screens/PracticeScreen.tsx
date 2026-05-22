@@ -29,10 +29,20 @@ import { PAST_PAPER_LINKS } from '../data/pastPaperLinks';
 import { Linking } from 'react-native';
 import { maybePromptOnNailedIt } from '../utils/reviewPrompt';
 import { getActiveFastLaneIds } from '../utils/fastLane';
+import { computeStreak } from '../utils/streak';
+import { loadPlan } from '../services/storage/planStorage';
 import { useSessionTimer, formatTime } from '../utils/sessionTimer';
 import { getEstimatedMinutes } from '../utils/catalog';
 import { getTipForSession } from '../notifications/revisionTips';
 import { getIntentionPlaceholder } from '../utils/intentionPlaceholders';
+import { checkForNewBadges, markBadgesSeen } from '../services/badges/badgeService';
+import { BADGE_BY_ID, type BadgeId } from '../types/badges';
+import { usePlus } from '../context/PlusContext';
+import TopicNailedCard from '../components/share/TopicNailedCard';
+import SubjectClearedCard from '../components/share/SubjectClearedCard';
+import BadgeUnlockCard from '../components/share/BadgeUnlockCard';
+import { shareCardImage } from '../components/share/shareCard';
+import type { ViewShotRef } from 'react-native-view-shot';
 import type { AppTabParamList } from '../navigation/TabNavigator';
 import EmptyState from '../components/EmptyState';
 import { TILE_PALETTE } from '../constants/palette';
@@ -323,6 +333,20 @@ export default function PracticeScreen() {
     sub: string;
     link?: string;
   } | null>(null);
+  const [badgeToast, setBadgeToast]             = useState<BadgeId | null>(null);
+  const badgeQueueRef                           = useRef<BadgeId[]>([]);
+  const { isPlus } = usePlus();
+
+  // Share card data — populated when a shareable celebration fires
+  const topicNailedCardRef    = useRef<any>(null);
+  const subjectClearedCardRef = useRef<any>(null);
+  const badgeCardRef          = useRef<any>(null);
+  const [shareCardData, setShareCardData] = useState<{
+    type: 'topic_nailed' | 'subject_cleared';
+    topicName?: string; subjectName?: string; streak: number;
+    startConf?: number; sessionsToNail?: number;
+    domainBars?: Array<{ label: string; avgConf: number }>; topicCount?: number;
+  } | null>(null);
 
   const [intention, setIntention] = useState('');
   // 'idle' = pre-session, 'running'/'paused'/'done' = timer states, 'checkin' = rate confidence
@@ -545,7 +569,7 @@ export default function PracticeScreen() {
         noteLen: note.trim().length,
       });
 
-      const allAttempts = await loadAttempts();
+      const [allAttempts, plan] = await Promise.all([loadAttempts(), loadPlan()]);
       void maybePromptOnNailedIt(confidence, allAttempts.length);
 
       // Celebration for every check-in
@@ -555,16 +579,53 @@ export default function PracticeScreen() {
       );
       const pastPaperLink = PAST_PAPER_LINKS[selectedSubject.name];
 
-      // Build the post-celebration callback — navigates back if this was a plan deep-link
-      const afterCelebration = (returnTo && openedFromPlanRef.current)
-        ? () => {
-            openedFromPlanRef.current = false;
-            tabNav.navigate(returnTo);
-          }
-        : undefined;
+      // Check for new badges (async, non-blocking)
+      void checkForNewBadges().then((newBadges) => {
+        if (newBadges.length > 0) {
+          void markBadgesSeen(newBadges);
+          badgeQueueRef.current = newBadges;
+        }
+      });
+
+      // Build the post-celebration callback — navigates back + shows badge toast
+      const afterCelebration = () => {
+        // Show first queued badge toast
+        if (badgeQueueRef.current.length > 0) {
+          setBadgeToast(badgeQueueRef.current[0]);
+          badgeQueueRef.current = badgeQueueRef.current.slice(1);
+        }
+        if (returnTo && openedFromPlanRef.current) {
+          openedFromPlanRef.current = false;
+          tabNav.navigate(returnTo);
+        }
+      };
+
+      const currentStreak = computeStreak(plan?.sessions ?? []);
 
       if (allNowHigh && allSubjectTopics.length > 0 && confidence >= 4) {
         void logEvent('subject_completed', { subjectId: selectedSubject.id });
+        // Prepare subject cleared share card data
+        const domainBars = (() => {
+          const map = new Map<string, number[]>();
+          for (const t of allSubjectTopics) {
+            const ci = t.id === sheetTopic.id ? confidence : (t.confidence ?? 0);
+            const prefix = t.name.includes(': ') ? t.name.split(': ')[0] : 'General';
+            const arr = map.get(prefix) ?? [];
+            arr.push(ci);
+            map.set(prefix, arr);
+          }
+          return [...map.entries()].map(([label, confs]) => ({
+            label,
+            avgConf: confs.reduce((s, c) => s + c, 0) / confs.length,
+          }));
+        })();
+        setShareCardData({
+          type: 'subject_cleared',
+          subjectName: selectedSubject.name,
+          topicCount: allSubjectTopics.length,
+          domainBars,
+          streak: currentStreak,
+        });
         showCelebration({ emoji: '🏆', title: `${selectedSubject.name} complete!`, sub: 'All topics at confident or above' }, 2200, afterCelebration);
       } else {
         const LEVEL_CONTENT: Record<number, { emoji: string; titles: string[]; sub: string; holdMs: number }> = {
@@ -577,7 +638,20 @@ export default function PracticeScreen() {
         const lvl = LEVEL_CONTENT[confidence]!;
         const title = lvl.titles[Math.floor(Math.random() * lvl.titles.length)];
         const link = (confidence <= 2 && pastPaperLink) ? pastPaperLink : undefined;
-        if (confidence === 5) void logEvent('topic_nailed', { topicId: sheetTopic.id, subjectId: selectedSubject.id });
+        if (confidence === 5) {
+          void logEvent('topic_nailed', { topicId: sheetTopic.id, subjectId: selectedSubject.id });
+          // Compute journey for share card
+          const topicAttempts = allAttempts.filter((a) => a.topicId === sheetTopic.id).sort((a, b) => a.ts - b.ts);
+          const startConf = topicAttempts.length > 0 ? topicAttempts[0].confidence : 1;
+          setShareCardData({
+            type: 'topic_nailed',
+            topicName: sheetTopic.name,
+            subjectName: selectedSubject.name,
+            streak: currentStreak,
+            startConf,
+            sessionsToNail: topicAttempts.length,
+          });
+        }
         showCelebration({ emoji: lvl.emoji, title, sub: lvl.sub, link }, lvl.holdMs, afterCelebration);
       }
 
@@ -1045,9 +1119,101 @@ export default function PracticeScreen() {
               </Pressable>
             )}
             <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', marginTop: 4 }}>tap to dismiss</Text>
+
+            {/* Share button — Plus only, shown for topic nailed and subject cleared */}
+            {isPlus && shareCardData && (
+              <Pressable
+                onPress={() => {
+                  const ref = shareCardData.type === 'topic_nailed' ? topicNailedCardRef : subjectClearedCardRef;
+                  void shareCardImage(ref, `I just ${shareCardData.type === 'topic_nailed' ? 'nailed' : 'cleared'} ${shareCardData.subjectName ?? shareCardData.topicName} on NailExams!`, 'share_card', { type: shareCardData.type });
+                }}
+                style={{
+                  marginTop: 10,
+                  flexDirection: 'row', alignItems: 'center', gap: 6,
+                  backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 10,
+                  paddingHorizontal: 16, paddingVertical: 8,
+                }}
+              >
+                <Text style={{ fontSize: 14 }}>📤</Text>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: '#FFF' }}>Share</Text>
+              </Pressable>
+            )}
           </Pressable>
         </Animated.View>
       )}
+
+      {/* ── Off-screen share cards (captured by ViewShot) ── */}
+      {shareCardData?.type === 'topic_nailed' && (
+        <TopicNailedCard
+          cardRef={topicNailedCardRef}
+          topicName={shareCardData.topicName ?? ''}
+          subjectName={shareCardData.subjectName ?? ''}
+          streak={shareCardData.streak}
+          startConf={shareCardData.startConf ?? 1}
+          sessionsToNail={shareCardData.sessionsToNail ?? 1}
+        />
+      )}
+      {shareCardData?.type === 'subject_cleared' && (
+        <SubjectClearedCard
+          cardRef={subjectClearedCardRef}
+          subjectName={shareCardData.subjectName ?? ''}
+          topicCount={shareCardData.topicCount ?? 0}
+          domainBars={shareCardData.domainBars ?? []}
+          streak={shareCardData.streak}
+        />
+      )}
+      {badgeToast && BADGE_BY_ID.get(badgeToast) && (
+        <BadgeUnlockCard
+          cardRef={badgeCardRef}
+          badge={BADGE_BY_ID.get(badgeToast)!}
+          streak={0}
+        />
+      )}
+
+      {/* ── Badge toast ── */}
+      {badgeToast && (() => {
+        const def = BADGE_BY_ID.get(badgeToast);
+        if (!def) return null;
+        return (
+          <Pressable
+            onPress={() => setBadgeToast(null)}
+            style={{
+              position: 'absolute', bottom: 32, left: 16, right: 16,
+              backgroundColor: theme.colors.cardBg,
+              borderRadius: 16, padding: 16,
+              flexDirection: 'row', alignItems: 'center', gap: 12,
+              shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 16,
+              shadowOffset: { width: 0, height: 4 }, elevation: 8,
+              borderWidth: 1, borderColor: theme.colors.cardBorder,
+            }}
+          >
+            <View style={{
+              width: 44, height: 44, borderRadius: 12,
+              backgroundColor: '#EEEDFE', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <Text style={{ fontSize: 22 }}>{def.emoji}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 10, fontWeight: '600', color: '#7F77DD', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 2 }}>
+                Badge unlocked
+              </Text>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: theme.colors.textPrimary }}>{def.name}</Text>
+              <Text style={{ fontSize: 11, color: theme.colors.textMuted, marginTop: 1 }}>{def.description}</Text>
+              {isPlus && (
+                <Pressable
+                  onPress={() => void shareCardImage(badgeCardRef, `I just unlocked the "${def.name}" badge on NailExams! ${def.emoji}`, 'share_badge', { badgeId: badgeToast })}
+                  style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                >
+                  <Text style={{ fontSize: 11, color: '#7F77DD', fontWeight: '600' }}>📤 Share badge</Text>
+                </Pressable>
+              )}
+            </View>
+            <Pressable onPress={() => setBadgeToast(null)}>
+              <Text style={{ color: theme.colors.textMuted, fontSize: 18 }}>×</Text>
+            </Pressable>
+          </Pressable>
+        );
+      })()}
     </>
   );
 }

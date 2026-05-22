@@ -479,6 +479,18 @@ export default function SettingsScreen({ navigation }: Props) {
         />
       </View>
 
+      {/* ── Badges section ── */}
+      <Text style={styles.sectionLabel}>Achievements</Text>
+      <View style={styles.menuGroup}>
+        <MenuRow
+          icon="🏅"
+          iconBg="#EEEDFE"
+          label="Your badges"
+          onPress={() => navigation.navigate('Badges')}
+          styles={styles}
+        />
+      </View>
+
       {/* ── Legal section ── */}
       <Text style={styles.sectionLabel}>Legal</Text>
       <View style={styles.menuGroup}>

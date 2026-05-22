@@ -11,6 +11,8 @@ export const STORAGE_KEYS = {
   notifSettingsV1: 'NE_NOTIF_SETTINGS_V1',
   reviewPrompted: 'NE_REVIEW_PROMPTED',
   weeklyGoalV1: 'NE_WEEKLY_GOAL_V1',
+  badgesSeenV1: 'NE_BADGES_SEEN_V1',
+  progressShared: 'NE_PROGRESS_SHARED',
 } as const;
 
 export const CURRENT_STORAGE_VERSION = 1;
