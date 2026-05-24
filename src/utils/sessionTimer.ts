@@ -13,85 +13,89 @@ export type SessionTimerState = {
   reset: () => void;
 };
 
-/**
- * Foreground-only Pomodoro-style timer.
- * Pauses automatically when the app goes to background.
- */
 export function useSessionTimer(durationSeconds: number): SessionTimerState {
-  const [phase, setPhase]               = useState<TimerPhase>('idle');
-  const [remaining, setRemaining]       = useState(durationSeconds);
-  const intervalRef                     = useRef<ReturnType<typeof setInterval> | null>(null);
-  const backgroundRef                   = useRef<TimerPhase>('idle');
-  const pausedByAppRef                  = useRef(false);
+  const [phase, setPhase]         = useState<TimerPhase>('idle');
+  const [remaining, setRemaining] = useState(durationSeconds);
+  const tickRef                   = useRef<ReturnType<typeof setInterval> | null>(null);
+  const phaseRef                  = useRef<TimerPhase>('idle');
+  const bgTimeRef                 = useRef<number | null>(null);
 
-  const clearTick = () => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
+  // Keep phaseRef in sync for use inside AppState handler (avoids stale closure).
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
+
+  function stopTick() {
+    if (tickRef.current !== null) {
+      clearInterval(tickRef.current);
+      tickRef.current = null;
     }
-  };
+  }
 
-  const startTick = useCallback(() => {
-    clearTick();
-    intervalRef.current = setInterval(() => {
-      setRemaining((prev) => {
-        if (prev <= 1) {
-          clearTick();
-          setPhase('done');
-          return 0;
-        }
-        return prev - 1;
-      });
+  function startTick() {
+    stopTick();
+    tickRef.current = setInterval(() => {
+      // Pure updater — no side effects. The useEffect below detects reaching 0.
+      setRemaining(prev => (prev <= 1 ? 0 : prev - 1));
     }, 1000);
-  }, []);
+  }
 
+  // Transition to 'done' once remaining hits 0 while running.
+  useEffect(() => {
+    if (remaining === 0 && phase === 'running') {
+      stopTick();
+      phaseRef.current = 'done';
+      setPhase('done');
+    }
+  }, [remaining, phase]);
+
+  // Decrement by 1 immediately on start so display opens at e.g. 24:59.
   const start = useCallback(() => {
+    setRemaining(prev => Math.max(0, prev - 1));
+    phaseRef.current = 'running';
     setPhase('running');
     startTick();
-  }, [startTick]);
+  // startTick / stopTick only read tickRef — stale closure is safe.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const pause = useCallback(() => {
-    clearTick();
+    stopTick();
+    phaseRef.current = 'paused';
     setPhase('paused');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const resume = useCallback(() => {
+    phaseRef.current = 'running';
     setPhase('running');
     startTick();
-  }, [startTick]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const reset = useCallback(() => {
-    clearTick();
+    stopTick();
+    phaseRef.current = 'idle';
     setPhase('idle');
     setRemaining(durationSeconds);
   }, [durationSeconds]);
 
-  // Pause when app goes to background, resume when it comes back
+  // Compensate for time spent in the background.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state !== 'active') {
-        // Going to background
-        if (backgroundRef.current === 'running') {
-          clearTick();
-          pausedByAppRef.current = true;
-        }
+        if (phaseRef.current === 'running') bgTimeRef.current = Date.now();
       } else {
-        // Coming back to foreground
-        if (pausedByAppRef.current) {
-          pausedByAppRef.current = false;
-          startTick();
+        if (phaseRef.current === 'running' && bgTimeRef.current !== null) {
+          const elapsed = Math.floor((Date.now() - bgTimeRef.current) / 1000);
+          bgTimeRef.current = null;
+          if (elapsed > 0) setRemaining(prev => Math.max(0, prev - elapsed));
         }
       }
     });
     return () => sub.remove();
-  }, [startTick]);
+  }, []);
 
-  // Keep background ref in sync with phase
-  useEffect(() => {
-    backgroundRef.current = phase;
-  }, [phase]);
-
-  useEffect(() => () => clearTick(), []);
+  // Clear interval on unmount.
+  useEffect(() => stopTick, []);
 
   return {
     phase,

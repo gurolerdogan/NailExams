@@ -1,49 +1,24 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
-  Animated,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import type { Subject, Topic } from '../types/models';
-import { loadTopics, saveTopics } from '../services/storage/nailexamsStorage';
-import { appendAttempt, loadAttempts } from '../services/storage/practiceStorage';
-import type { PracticeAttempt } from '../types/practice';
-import { uuid } from '../utils/id';
-import { now } from '../utils/time';
-import { logEvent } from '../services/logging/logEvent';
-import { PAST_PAPER_LINKS } from '../data/pastPaperLinks';
-import { Linking } from 'react-native';
-import { maybePromptOnNailedIt } from '../utils/reviewPrompt';
+import { loadTopics } from '../services/storage/nailexamsStorage';
+import { loadAttempts } from '../services/storage/practiceStorage';
 import { getActiveFastLaneIds } from '../utils/fastLane';
-import { computeStreak } from '../utils/streak';
-import { loadPlan } from '../services/storage/planStorage';
-import { useSessionTimer, formatTime } from '../utils/sessionTimer';
-import { getEstimatedMinutes } from '../utils/catalog';
-import { getTipForSession } from '../notifications/revisionTips';
-import { getIntentionPlaceholder } from '../utils/intentionPlaceholders';
-import { checkForNewBadges, markBadgesSeen } from '../services/badges/badgeService';
-import { BADGE_BY_ID, type BadgeId } from '../types/badges';
-import { usePlus } from '../context/PlusContext';
-import TopicNailedCard from '../components/share/TopicNailedCard';
-import SubjectClearedCard from '../components/share/SubjectClearedCard';
-import BadgeUnlockCard from '../components/share/BadgeUnlockCard';
-import { shareCardImage } from '../components/share/shareCard';
-import type { ViewShotRef } from 'react-native-view-shot';
 import type { AppTabParamList } from '../navigation/TabNavigator';
+import type { PracticeStackParamList } from '../navigation/PracticeNavigator';
 import EmptyState from '../components/EmptyState';
 import { TILE_PALETTE } from '../constants/palette';
 import type { Theme, ProgressChartType, CheckedInType } from '../themes';
@@ -52,7 +27,7 @@ const CONF_BAR_COLORS = ['#E24B4A', '#EF9F27', '#FAC775', '#97C459', '#1D9E75'];
 const CONF_BG         = ['#FCEBEB', '#FAEEDA', '#FEF9C3', '#EAF3DE', '#E1F5EE'];
 const CONF_TEXT       = ['#A32D2D', '#633806', '#854D0E', '#27500A', '#085041'];
 
-type PracticeRoute = RouteProp<AppTabParamList, 'Practice'>;
+type PracticeRoute = RouteProp<PracticeStackParamList, 'PracticeHome'>;
 
 // ─── Small reusable components ────────────────────────────────────────────────
 
@@ -232,75 +207,6 @@ function createStyles(theme: Theme) {
       borderColor: theme.colors.cardBorder,
     },
     confPillTextUnchecked: { fontSize: 11, fontWeight: '500', color: theme.colors.textMuted },
-
-    sheetOverlay: {
-      flex: 1,
-      justifyContent: 'flex-end',
-      backgroundColor: 'rgba(0,0,0,0.35)',
-    },
-    sheet: {
-      backgroundColor: theme.colors.cardBg,
-      borderTopLeftRadius: 24,
-      borderTopRightRadius: 24,
-      padding: 20,
-      paddingBottom: Platform.OS === 'ios' ? 36 : 24,
-    },
-    sheetHandle: {
-      width: 36,
-      height: 4,
-      backgroundColor: theme.colors.cardBorder,
-      borderRadius: 2,
-      alignSelf: 'center',
-      marginBottom: 16,
-    },
-    sheetTopic: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: theme.colors.textPrimary,
-      marginBottom: 2,
-    },
-    sheetSubject: { fontSize: 12, color: theme.colors.textSecondary, marginBottom: 6 },
-    sheetLastCheckin: { fontSize: 11, color: theme.colors.textMuted, marginBottom: 18, fontStyle: 'italic' },
-    sheetLabel: { fontSize: 12, color: theme.colors.textSecondary, marginBottom: 8 },
-
-    confSelector: { flexDirection: 'row', gap: 8, marginBottom: 18 },
-    confBtn: {
-      flex: 1,
-      height: 42,
-      borderRadius: theme.radii.input,
-      borderWidth: 1.5,
-      borderColor: theme.colors.cardBorder,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.colors.cardBg,
-    },
-    confBtnText: { fontSize: 15, fontWeight: '600', color: theme.colors.textPrimary },
-
-    noteInput: {
-      borderWidth: 0.5,
-      borderColor: theme.colors.inputBorder,
-      borderRadius: theme.radii.input,
-      padding: 10,
-      fontSize: 13,
-      color: theme.colors.inputText,
-      minHeight: 70,
-      textAlignVertical: 'top',
-      backgroundColor: theme.colors.inputBg,
-      marginBottom: 14,
-    },
-    saveBtn: {
-      backgroundColor: theme.colors.buttonPrimaryBg,
-      borderRadius: 14,
-      paddingVertical: 14,
-      alignItems: 'center',
-    },
-    saveBtnText: { color: theme.colors.buttonPrimaryText, fontSize: 14, fontWeight: '600' },
-    saveHint: {
-      textAlign: 'center',
-      fontSize: 11,
-      color: theme.colors.textMuted,
-      marginTop: 8,
-    },
   });
 }
 
@@ -309,103 +215,23 @@ export default function PracticeScreen() {
   const { subjects } = useAuth();
   const { theme } = useTheme();
   const route = useRoute<PracticeRoute>();
-  const tabNav = useNavigation<BottomTabNavigationProp<AppTabParamList>>();
+  const navigation = useNavigation<NativeStackNavigationProp<PracticeStackParamList, 'PracticeHome'>>();
 
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   const subjectIdFromNav = route.params?.subjectId;
-  const topicIdFromNav   = route.params?.topicId;
-  const returnTo         = route.params?.returnTo;
 
   const [allTopics, setAllTopics]               = useState<Topic[]>([]);
   const [selectedSubject, setSelectedSubject]   = useState<Subject | null>(null);
   const [collapsedDomains, setCollapsedDomains] = useState<Set<string>>(new Set());
   const [lastNoteByTopic, setLastNoteByTopic]   = useState<Map<string, string>>(new Map());
-  const [sheetTopic, setSheetTopic]             = useState<Topic | null>(null);
-  // null = no button pre-selected; user must pick a confidence level before saving
-  const [confidence, setConfidence]             = useState<1 | 2 | 3 | 4 | 5 | null>(null);
-  const [note, setNote]                         = useState('');
-  const [busy, setBusy]                         = useState(false);
-  const [sheetVisible, setSheetVisible]         = useState(false);
-  const [celebration, setCelebration]           = useState<{
-    emoji: string;
-    title: string;
-    sub: string;
-    link?: string;
-  } | null>(null);
-  const [badgeToast, setBadgeToast]             = useState<BadgeId | null>(null);
-  const badgeQueueRef                           = useRef<BadgeId[]>([]);
-  const { isPlus } = usePlus();
-
-  // Share card data — populated when a shareable celebration fires
-  const topicNailedCardRef    = useRef<any>(null);
-  const subjectClearedCardRef = useRef<any>(null);
-  const badgeCardRef          = useRef<any>(null);
-  const [shareCardData, setShareCardData] = useState<{
-    type: 'topic_nailed' | 'subject_cleared';
-    topicName?: string; subjectName?: string; streak: number;
-    startConf?: number; sessionsToNail?: number;
-    domainBars?: Array<{ label: string; avgConf: number }>; topicCount?: number;
-  } | null>(null);
-
-  const [intention, setIntention] = useState('');
-  // 'idle' = pre-session, 'running'/'paused'/'done' = timer states, 'checkin' = rate confidence
-  const [sheetPhase, setSheetPhase] = useState<'idle' | 'running' | 'paused' | 'done' | 'checkin'>('idle');
-
-  const timerDuration = sheetTopic ? getEstimatedMinutes(sheetTopic.name) * 60 : 25 * 60;
-  const timer = useSessionTimer(timerDuration);
-
-  const slideAnim       = useRef(new Animated.Value(300)).current;
-  const celebrationAnim = useRef(new Animated.Value(0)).current;
-
-  // Keep a ref so openSheet can read the latest notes without being a dep of the
-  // topicIdFromNav effect — prevents the sheet from re-opening after every save.
-  const lastNoteByTopicRef = useRef(lastNoteByTopic);
-  lastNoteByTopicRef.current = lastNoteByTopic;
-
-  // True only when the sheet was auto-opened by a plan deep-link in the current session.
-  // Manually tapping a topic resets this to false so returnTo is never triggered.
-  const openedFromPlanRef = useRef(false);
-
-  const openSheet = useCallback((topic: Topic) => {
-    openedFromPlanRef.current = false; // manual open — clear the plan-link flag
-    setSheetTopic(topic);
-    const existing = topic.confidence && topic.confidence > 0
-      ? (topic.confidence as 1 | 2 | 3 | 4 | 5)
-      : null;
-    setConfidence(existing);
-    setNote(lastNoteByTopicRef.current.get(topic.id) ?? '');
-    setIntention('');
-    setSheetPhase('idle');
-    timer.reset();
-    setSheetVisible(true);
-    Animated.spring(slideAnim, {
-      toValue: 0,
-      useNativeDriver: true,
-      damping: 20,
-      stiffness: 180,
-    }).start();
-  }, [slideAnim]); // stable — no lastNoteByTopic dep
-
-  const closeSheet = useCallback(() => {
-    Animated.timing(slideAnim, {
-      toValue: 300,
-      duration: 220,
-      useNativeDriver: true,
-    }).start(() => {
-      setSheetVisible(false);
-      setSheetTopic(null);
-    });
-  }, [slideAnim]);
-
-  const [fastLaneIds, setFastLaneIds] = useState<Set<string>>(new Set());
+  const [fastLaneIds, setFastLaneIds]           = useState<Set<string>>(new Set());
 
   // ── Load topics + attempts ────────────────────────────────────────────────────
   const refreshTopics = useCallback(async () => {
     const [data, attempts] = await Promise.all([loadTopics(), loadAttempts()]);
     setAllTopics(data);
     setFastLaneIds(getActiveFastLaneIds(data, attempts));
-    // Build a map of topicId → most recent note (attempts are stored oldest→newest)
     const noteMap = new Map<string, string>();
     for (const a of attempts) {
       if (a.note) noteMap.set(a.topicId, a.note);
@@ -416,7 +242,7 @@ export default function PracticeScreen() {
   useEffect(() => { void refreshTopics(); }, [refreshTopics]);
   useFocusEffect(useCallback(() => { void refreshTopics(); }, [refreshTopics]));
 
-  // ── Handle inbound nav params (from Home tile or Plan session) ────────────────
+  // ── Handle inbound subjectId param (from Home tile) ───────────────────────────
   const subjectsKey = useMemo(() => subjects.map((s) => s.id).join('|'), [subjects]);
 
   useEffect(() => {
@@ -428,31 +254,6 @@ export default function PracticeScreen() {
       return s;
     });
   }, [subjectIdFromNav, subjectsKey]);
-
-  // Track which topicId we already opened so allTopics reloads don't re-trigger the sheet.
-  // Reset to null when topicIdFromNav clears (user navigated away without a topicId) so a
-  // future Plan → Practice navigation for the same topic still works.
-  const handledTopicIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!topicIdFromNav) {
-      handledTopicIdRef.current = null; // params cleared — ready for next navigation
-      return;
-    }
-    if (allTopics.length === 0) return;
-    if (topicIdFromNav === handledTopicIdRef.current) return; // already handled this navigation
-    const t = allTopics.find((x) => x.id === topicIdFromNav);
-    if (t) {
-      handledTopicIdRef.current = topicIdFromNav;
-      openSheet(t);
-      openedFromPlanRef.current = true; // mark as plan-link open AFTER openSheet resets it
-    }
-  }, [topicIdFromNav, allTopics, openSheet]);
-
-  // Advance to check-in phase when timer finishes
-  useEffect(() => {
-    if (timer.phase === 'done') setSheetPhase('checkin');
-  }, [timer.phase]);
 
   // ── Derived data ──────────────────────────────────────────────────────────────
   const subjectStats = useMemo(() => {
@@ -491,7 +292,6 @@ export default function PracticeScreen() {
     }
     return Array.from(groups.entries()).map(([domain, topics]) => ({
       domain,
-      // Sort alphabetically by the short name (after the domain prefix)
       topics: [...topics].sort((a, b) => {
         const aShort = a.name.includes(': ') ? a.name.split(': ').slice(1).join(': ') : a.name;
         const bShort = b.name.includes(': ') ? b.name.split(': ').slice(1).join(': ') : b.name;
@@ -506,162 +306,6 @@ export default function PracticeScreen() {
       next.has(domain) ? next.delete(domain) : next.add(domain);
       return next;
     });
-
-  // ── Save check-in ─────────────────────────────────────────────────────────────
-  const showCelebration = (
-    payload: { emoji: string; title: string; sub: string; link?: string },
-    holdMs = 1800,
-    onComplete?: () => void,
-  ) => {
-    setCelebration(payload);
-    celebrationAnim.setValue(0);
-    Animated.sequence([
-      Animated.spring(celebrationAnim, { toValue: 1, useNativeDriver: true, damping: 14, stiffness: 160 }),
-      Animated.delay(holdMs),
-      Animated.timing(celebrationAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
-    ]).start(() => {
-      setCelebration(null);
-      onComplete?.();
-    });
-  };
-
-  const submit = async () => {
-    if (busy || !selectedSubject || !sheetTopic || confidence === null) return;
-
-    try {
-      setBusy(true);
-      const ts = now();
-
-      const attempt: PracticeAttempt = {
-        id: uuid(),
-        subjectId: selectedSubject.id,
-        topicId: sheetTopic.id,
-        ts,
-        confidence,
-        note: note.trim() || undefined,
-      };
-
-      await appendAttempt(attempt);
-
-      const idx = allTopics.findIndex((t) => t.id === sheetTopic.id);
-      if (idx >= 0) {
-        const updated: Topic = {
-          ...allTopics[idx],
-          confidence,
-          lastPracticedAt: ts,
-          updatedAt: ts,
-        };
-        const nextAll = [...allTopics];
-        nextAll[idx] = updated;
-        setAllTopics(nextAll);
-        await saveTopics(nextAll);
-      }
-
-      // Keep lastNoteByTopic in sync so the note is shown immediately on reopen
-      if (note.trim()) {
-        setLastNoteByTopic((prev) => new Map(prev).set(sheetTopic.id, note.trim()));
-      }
-
-      await logEvent('practice_checkin_saved', {
-        subjectId: selectedSubject.id,
-        topicId: sheetTopic.id,
-        confidence,
-        noteLen: note.trim().length,
-      });
-
-      const [allAttempts, plan] = await Promise.all([loadAttempts(), loadPlan()]);
-      void maybePromptOnNailedIt(confidence, allAttempts.length);
-
-      // Celebration for every check-in
-      const allSubjectTopics = allTopics.filter((t) => t.subjectId === selectedSubject.id);
-      const allNowHigh = allSubjectTopics.every((t) =>
-        t.id === sheetTopic.id ? confidence >= 4 : (t.confidence ?? 0) >= 4,
-      );
-      const pastPaperLink = PAST_PAPER_LINKS[selectedSubject.name];
-
-      // Check for new badges (async, non-blocking)
-      void checkForNewBadges().then((newBadges) => {
-        if (newBadges.length > 0) {
-          void markBadgesSeen(newBadges);
-          badgeQueueRef.current = newBadges;
-        }
-      });
-
-      // Build the post-celebration callback — navigates back + shows badge toast
-      const afterCelebration = () => {
-        // Show first queued badge toast
-        if (badgeQueueRef.current.length > 0) {
-          setBadgeToast(badgeQueueRef.current[0]);
-          badgeQueueRef.current = badgeQueueRef.current.slice(1);
-        }
-        if (returnTo && openedFromPlanRef.current) {
-          openedFromPlanRef.current = false;
-          tabNav.navigate(returnTo);
-        }
-      };
-
-      const currentStreak = computeStreak(plan?.sessions ?? []);
-
-      if (allNowHigh && allSubjectTopics.length > 0 && confidence >= 4) {
-        void logEvent('subject_completed', { subjectId: selectedSubject.id });
-        // Prepare subject cleared share card data
-        const domainBars = (() => {
-          const map = new Map<string, number[]>();
-          for (const t of allSubjectTopics) {
-            const ci = t.id === sheetTopic.id ? confidence : (t.confidence ?? 0);
-            const prefix = t.name.includes(': ') ? t.name.split(': ')[0] : 'General';
-            const arr = map.get(prefix) ?? [];
-            arr.push(ci);
-            map.set(prefix, arr);
-          }
-          return [...map.entries()].map(([label, confs]) => ({
-            label,
-            avgConf: confs.reduce((s, c) => s + c, 0) / confs.length,
-          }));
-        })();
-        setShareCardData({
-          type: 'subject_cleared',
-          subjectName: selectedSubject.name,
-          topicCount: allSubjectTopics.length,
-          domainBars,
-          streak: currentStreak,
-        });
-        showCelebration({ emoji: '🏆', title: `${selectedSubject.name} complete!`, sub: 'All topics at confident or above' }, 2200, afterCelebration);
-      } else {
-        const LEVEL_CONTENT: Record<number, { emoji: string; titles: string[]; sub: string; holdMs: number }> = {
-          1: { emoji: '💪', titles: ["Keep going!", "You've got this!", "Don't give up!"],       sub: "This one needs work — keep revisiting it.", holdMs: 3000 },
-          2: { emoji: '📖', titles: ["Getting there!", "Keep at it!", "A bit more to go!"],      sub: "A few more practice sessions will help.",    holdMs: 3000 },
-          3: { emoji: '👍', titles: ["Way to go!", "Keep revising!", "Good progress!"],          sub: "You're building solid understanding.",         holdMs: 2000 },
-          4: { emoji: '⭐', titles: ["Almost nailed it!", "So close!", "Nearly there!"],         sub: "One more push and you'll have this.",          holdMs: 2000 },
-          5: { emoji: '🎯', titles: ["Nailed it!", "Outstanding!", "Brilliant work!"],           sub: sheetTopic.name,                               holdMs: 1800 },
-        };
-        const lvl = LEVEL_CONTENT[confidence]!;
-        const title = lvl.titles[Math.floor(Math.random() * lvl.titles.length)];
-        const link = (confidence <= 2 && pastPaperLink) ? pastPaperLink : undefined;
-        if (confidence === 5) {
-          void logEvent('topic_nailed', { topicId: sheetTopic.id, subjectId: selectedSubject.id });
-          // Compute journey for share card
-          const topicAttempts = allAttempts.filter((a) => a.topicId === sheetTopic.id).sort((a, b) => a.ts - b.ts);
-          const startConf = topicAttempts.length > 0 ? topicAttempts[0].confidence : 1;
-          setShareCardData({
-            type: 'topic_nailed',
-            topicName: sheetTopic.name,
-            subjectName: selectedSubject.name,
-            streak: currentStreak,
-            startConf,
-            sessionsToNail: topicAttempts.length,
-          });
-        }
-        showCelebration({ emoji: lvl.emoji, title, sub: lvl.sub, link }, lvl.holdMs, afterCelebration);
-      }
-
-      closeSheet();
-    } catch (e: any) {
-      Alert.alert('Save failed', 'Your check-in could not be saved. Please try again.');
-    } finally {
-      setBusy(false);
-    }
-  };
 
   // ── Render: subject grid ──────────────────────────────────────────────────────
   const renderSubjectGrid = () => (
@@ -678,7 +322,11 @@ export default function PracticeScreen() {
           title="No subjects yet"
           body="Add your GCSE subjects to see topics and start checking in."
           cta="Edit subjects"
-          onCta={() => tabNav.navigate('Settings', { screen: 'EditSubjects' })}
+          onCta={() =>
+            navigation
+              .getParent<BottomTabNavigationProp<AppTabParamList>>()
+              ?.navigate('Settings', { screen: 'EditSubjects' })
+          }
         />
       ) : theme.subjectPanel === 'tile' ? (
         /* ── TILE layout ── */
@@ -803,7 +451,6 @@ export default function PracticeScreen() {
                           ? item.name
                           : item.name.slice(colonIdx + 2);
                         const isLast     = idx === topics.length - 1;
-
                         const isFastLane = fastLaneIds.has(item.id);
 
                         return (
@@ -814,7 +461,7 @@ export default function PracticeScreen() {
                               isLast && styles.topicRowLast,
                               isFastLane && { borderLeftWidth: 3, borderLeftColor: '#E24B4A', paddingLeft: 10 },
                             ]}
-                            onPress={() => openSheet(item)}
+                            onPress={() => navigation.navigate('Session', { topicId: item.id, subjectId: item.subjectId })}
                           >
                             <View style={{ flex: 1 }}>
                               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
@@ -866,354 +513,6 @@ export default function PracticeScreen() {
     );
   };
 
-  // ── Render: bottom sheet ──────────────────────────────────────────────────────
-  const renderSheet = () => (
-    <Modal
-      visible={sheetVisible}
-      transparent
-      animationType="none"
-      onRequestClose={closeSheet}
-    >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.sheetOverlay}
-      >
-        <Pressable style={StyleSheet.absoluteFill} onPress={closeSheet} />
-        <Animated.View
-          style={[styles.sheet, { transform: [{ translateY: slideAnim }] }]}
-        >
-          <View style={styles.sheetHandle} />
-
-          <Text style={styles.sheetTopic} numberOfLines={2}>
-            {sheetTopic?.name}
-          </Text>
-          <Text style={styles.sheetSubject}>{selectedSubject?.name}</Text>
-
-          {/* ── STATE 1: Pre-session (intention + start timer) ── */}
-          {sheetPhase === 'idle' && sheetTopic && (
-            <>
-              {sheetTopic.lastPracticedAt ? (
-                <Text style={styles.sheetLastCheckin}>
-                  Last checked in: {new Date(sheetTopic.lastPracticedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
-                </Text>
-              ) : (
-                <Text style={styles.sheetLastCheckin}>Not checked in yet</Text>
-              )}
-
-              <Text style={styles.sheetLabel}>What's your goal for this session?</Text>
-              <TextInput
-                value={intention}
-                onChangeText={setIntention}
-                placeholder={getIntentionPlaceholder(sheetTopic.name)}
-                placeholderTextColor={theme.colors.textMuted}
-                style={[styles.noteInput, { marginBottom: 12 }]}
-                multiline={false}
-              />
-
-              <Pressable
-                style={styles.saveBtn}
-                onPress={() => {
-                  if (intention.trim()) setNote(`Goal: ${intention.trim()}`);
-                  setSheetPhase('running');
-                  timer.start();
-                }}
-              >
-                <Text style={styles.saveBtnText}>
-                  Start {Math.round(timerDuration / 60)}-min session
-                </Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => setSheetPhase('checkin')}
-                style={{ alignItems: 'center', paddingVertical: 10 }}
-              >
-                <Text style={{ fontSize: 12, color: theme.colors.textMuted, textDecorationLine: 'underline' }}>
-                  skip timer and check in now
-                </Text>
-              </Pressable>
-            </>
-          )}
-
-          {/* ── STATE 2: Session in progress ── */}
-          {(sheetPhase === 'running' || sheetPhase === 'paused') && sheetTopic && (
-            <>
-              {intention.trim() ? (
-                <Text style={[styles.sheetLastCheckin, { fontStyle: 'italic' }]}>"{intention}"</Text>
-              ) : null}
-
-              {/* Timer block */}
-              <View style={{
-                backgroundColor: '#E1F5EE', borderRadius: 12,
-                padding: 14, marginBottom: 10,
-                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-              }}>
-                <View>
-                  <Text style={{ fontFamily: 'monospace', fontSize: 28, fontWeight: '500', color: '#085041' }}>
-                    {formatTime(timer.remainingSeconds)}
-                  </Text>
-                  <Text style={{ fontSize: 10, color: '#085041', opacity: 0.7 }}>
-                    {sheetPhase === 'paused' ? 'paused' : 'remaining'}
-                  </Text>
-                </View>
-                <Pressable
-                  onPress={() => {
-                    if (sheetPhase === 'running') { timer.pause(); setSheetPhase('paused'); }
-                    else { timer.resume(); setSheetPhase('running'); }
-                  }}
-                  style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: '#1D9E75', alignItems: 'center', justifyContent: 'center' }}
-                >
-                  <Text style={{ color: '#FFF', fontSize: 14 }}>{sheetPhase === 'running' ? '⏸' : '▶'}</Text>
-                </Pressable>
-              </View>
-
-              {/* Revision tip */}
-              <View style={{ backgroundColor: '#FAEEDA', borderRadius: 10, padding: 12, marginBottom: 12, flexDirection: 'row', gap: 8 }}>
-                <Text style={{ fontSize: 14, flexShrink: 0 }}>💡</Text>
-                <Text style={{ fontSize: 12, color: '#633806', lineHeight: 18, flex: 1 }}>
-                  {getTipForSession(sheetTopic.confidence ?? 0, fastLaneIds.has(sheetTopic.id), sheetTopic.id)}
-                </Text>
-              </View>
-
-              <Text style={{ fontSize: 10, color: theme.colors.textMuted, textAlign: 'center', marginBottom: 8 }}>
-                Timer pauses if you leave the app
-              </Text>
-
-              <Pressable
-                onPress={() => { timer.reset(); setSheetPhase('checkin'); }}
-                style={{ alignItems: 'center', paddingVertical: 8 }}
-              >
-                <Text style={{ fontSize: 12, color: theme.colors.textMuted, textDecorationLine: 'underline' }}>
-                  skip to check in
-                </Text>
-              </Pressable>
-            </>
-          )}
-
-          {/* ── STATE 3: Check-in (confidence rating) ── */}
-          {(sheetPhase === 'checkin' || sheetPhase === 'done') && sheetTopic && (
-            <>
-              {sheetPhase === 'done' && (
-                <Text style={{ fontSize: 13, color: '#1D9E75', fontWeight: '600', marginBottom: 8 }}>
-                  Session done · {Math.round(timerDuration / 60)} min
-                </Text>
-              )}
-
-              <Text style={styles.sheetLabel}>How confident are you?</Text>
-              <View style={styles.confSelector}>
-                {([1, 2, 3, 4, 5] as const).map((v) => {
-                  const selected = confidence === v;
-                  return (
-                    <Pressable
-                      key={v}
-                      style={[
-                        styles.confBtn,
-                        selected && { backgroundColor: CONF_BAR_COLORS[v - 1], borderColor: CONF_BAR_COLORS[v - 1] },
-                      ]}
-                      onPress={() => setConfidence(v)}
-                    >
-                      <Text style={[styles.confBtnText, selected && { color: '#FFF' }]}>{v}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              <Text style={styles.sheetLabel}>Note (optional)</Text>
-              <TextInput
-                value={note}
-                onChangeText={setNote}
-                placeholder="What did you struggle with?"
-                placeholderTextColor={theme.colors.textMuted}
-                style={styles.noteInput}
-                multiline
-                editable={!busy}
-              />
-
-              {selectedSubject && PAST_PAPER_LINKS[selectedSubject.name] && (
-                <Pressable
-                  onPress={() => void Linking.openURL(PAST_PAPER_LINKS[selectedSubject!.name])}
-                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, marginBottom: 8 }}
-                >
-                  <Text style={{ fontSize: 13, color: theme.colors.accent, fontWeight: '600' }}>
-                    Find past questions →
-                  </Text>
-                </Pressable>
-              )}
-
-              <Pressable
-                style={[styles.saveBtn, (busy || confidence === null) && { opacity: 0.4 }]}
-                onPress={submit}
-                disabled={busy || confidence === null}
-              >
-                <Text style={styles.saveBtnText}>{busy ? 'Saving…' : 'Save check-in'}</Text>
-              </Pressable>
-              {confidence === null && (
-                <Text style={styles.saveHint}>Pick a confidence level to save</Text>
-              )}
-            </>
-          )}
-        </Animated.View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-
   // ── Root render ───────────────────────────────────────────────────────────────
-  return (
-    <>
-      {!selectedSubject ? renderSubjectGrid() : renderTopicList()}
-      {renderSheet()}
-
-      {/* ── Milestone celebration overlay ── */}
-      {celebration && (
-        <Animated.View
-          style={{
-            ...StyleSheet.absoluteFillObject,
-            alignItems: 'center',
-            justifyContent: 'center',
-            opacity: celebrationAnim,
-            transform: [{ scale: celebrationAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) }],
-          }}
-        >
-          {/* Full-screen tap blocker — dismisses on tap outside the card */}
-          <Pressable
-            style={StyleSheet.absoluteFillObject}
-            onPress={() => setCelebration(null)}
-          />
-          <Pressable
-            style={{
-              backgroundColor: 'rgba(10,10,12,0.93)',
-              borderRadius: 28,
-              paddingHorizontal: 32,
-              paddingVertical: 28,
-              alignItems: 'center',
-              gap: 10,
-              marginHorizontal: 32,
-            }}
-            onPress={() => setCelebration(null)}
-          >
-            <Text style={{ fontSize: 64 }}>{celebration.emoji}</Text>
-            <Text style={{ fontSize: 22, fontWeight: '800', color: '#FFFFFF', textAlign: 'center', letterSpacing: -0.3 }}>
-              {celebration.title}
-            </Text>
-            <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', textAlign: 'center', lineHeight: 19 }}>
-              {celebration.sub}
-            </Text>
-            {celebration.link && (
-              <Pressable
-                onPress={() => {
-                  setCelebration(null);
-                  void Linking.openURL(celebration.link!);
-                }}
-                style={{
-                  marginTop: 4,
-                  backgroundColor: 'rgba(255,255,255,0.1)',
-                  borderRadius: 12,
-                  paddingHorizontal: 16,
-                  paddingVertical: 10,
-                  borderWidth: 1,
-                  borderColor: 'rgba(255,255,255,0.2)',
-                }}
-              >
-                <Text style={{ fontSize: 13, fontWeight: '600', color: '#FAC775', textAlign: 'center' }}>
-                  Need more help? Find past questions →
-                </Text>
-              </Pressable>
-            )}
-            <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', marginTop: 4 }}>tap to dismiss</Text>
-
-            {/* Share button — Plus only, shown for topic nailed and subject cleared */}
-            {isPlus && shareCardData && (
-              <Pressable
-                onPress={() => {
-                  const ref = shareCardData.type === 'topic_nailed' ? topicNailedCardRef : subjectClearedCardRef;
-                  void shareCardImage(ref, `I just ${shareCardData.type === 'topic_nailed' ? 'nailed' : 'cleared'} ${shareCardData.subjectName ?? shareCardData.topicName} on NailExams!`, 'share_card', { type: shareCardData.type });
-                }}
-                style={{
-                  marginTop: 10,
-                  flexDirection: 'row', alignItems: 'center', gap: 6,
-                  backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 10,
-                  paddingHorizontal: 16, paddingVertical: 8,
-                }}
-              >
-                <Text style={{ fontSize: 14 }}>📤</Text>
-                <Text style={{ fontSize: 13, fontWeight: '600', color: '#FFF' }}>Share</Text>
-              </Pressable>
-            )}
-          </Pressable>
-        </Animated.View>
-      )}
-
-      {/* ── Off-screen share cards (captured by ViewShot) ── */}
-      {shareCardData?.type === 'topic_nailed' && (
-        <TopicNailedCard
-          cardRef={topicNailedCardRef}
-          topicName={shareCardData.topicName ?? ''}
-          subjectName={shareCardData.subjectName ?? ''}
-          streak={shareCardData.streak}
-          startConf={shareCardData.startConf ?? 1}
-          sessionsToNail={shareCardData.sessionsToNail ?? 1}
-        />
-      )}
-      {shareCardData?.type === 'subject_cleared' && (
-        <SubjectClearedCard
-          cardRef={subjectClearedCardRef}
-          subjectName={shareCardData.subjectName ?? ''}
-          topicCount={shareCardData.topicCount ?? 0}
-          domainBars={shareCardData.domainBars ?? []}
-          streak={shareCardData.streak}
-        />
-      )}
-      {badgeToast && BADGE_BY_ID.get(badgeToast) && (
-        <BadgeUnlockCard
-          cardRef={badgeCardRef}
-          badge={BADGE_BY_ID.get(badgeToast)!}
-          streak={0}
-        />
-      )}
-
-      {/* ── Badge toast ── */}
-      {badgeToast && (() => {
-        const def = BADGE_BY_ID.get(badgeToast);
-        if (!def) return null;
-        return (
-          <Pressable
-            onPress={() => setBadgeToast(null)}
-            style={{
-              position: 'absolute', bottom: 32, left: 16, right: 16,
-              backgroundColor: theme.colors.cardBg,
-              borderRadius: 16, padding: 16,
-              flexDirection: 'row', alignItems: 'center', gap: 12,
-              shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 16,
-              shadowOffset: { width: 0, height: 4 }, elevation: 8,
-              borderWidth: 1, borderColor: theme.colors.cardBorder,
-            }}
-          >
-            <View style={{
-              width: 44, height: 44, borderRadius: 12,
-              backgroundColor: '#EEEDFE', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <Text style={{ fontSize: 22 }}>{def.emoji}</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 10, fontWeight: '600', color: '#7F77DD', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 2 }}>
-                Badge unlocked
-              </Text>
-              <Text style={{ fontSize: 14, fontWeight: '700', color: theme.colors.textPrimary }}>{def.name}</Text>
-              <Text style={{ fontSize: 11, color: theme.colors.textMuted, marginTop: 1 }}>{def.description}</Text>
-              {isPlus && (
-                <Pressable
-                  onPress={() => void shareCardImage(badgeCardRef, `I just unlocked the "${def.name}" badge on NailExams! ${def.emoji}`, 'share_badge', { badgeId: badgeToast })}
-                  style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 4 }}
-                >
-                  <Text style={{ fontSize: 11, color: '#7F77DD', fontWeight: '600' }}>📤 Share badge</Text>
-                </Pressable>
-              )}
-            </View>
-            <Pressable onPress={() => setBadgeToast(null)}>
-              <Text style={{ color: theme.colors.textMuted, fontSize: 18 }}>×</Text>
-            </Pressable>
-          </Pressable>
-        );
-      })()}
-    </>
-  );
+  return !selectedSubject ? renderSubjectGrid() : renderTopicList();
 }

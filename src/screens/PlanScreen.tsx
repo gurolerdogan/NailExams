@@ -349,9 +349,8 @@ export default function PlanScreen() {
   // Deep-link session → Practice
   const openPractice = useCallback((session: WeeklyPlan['sessions'][number]) => {
     tabNav.navigate('Practice', {
-      subjectId: session.subjectId,
-      topicId: session.topicId,
-      returnTo: 'Plan',
+      screen: 'Session',
+      params: { topicId: session.topicId, subjectId: session.subjectId, returnTo: 'Plan' },
     });
   }, [tabNav]);
 

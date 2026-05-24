@@ -624,7 +624,7 @@ export default function HomeScreen() {
                       examPhase === 'final' && { borderWidth: 2, borderColor: '#E24B4A' },
                       examPhase === 'crunch' && { borderWidth: 1.5, borderColor: '#EF9F27' },
                     ]}
-                    onPress={() => tabNav.navigate('Practice', { subjectId: s.id, topicId: undefined })}
+                    onPress={() => tabNav.navigate('Practice', { screen: 'PracticeHome', params: { subjectId: s.id } })}
                   >
                     {/* Exam countdown badge — top-right corner */}
                     {examDays !== undefined && (
@@ -674,7 +674,7 @@ export default function HomeScreen() {
                   <Pressable
                     key={s.id}
                     style={[styles.subjectListRow, isLast && styles.subjectListRowLast]}
-                    onPress={() => tabNav.navigate('Practice', { subjectId: s.id, topicId: undefined })}
+                    onPress={() => tabNav.navigate('Practice', { screen: 'PracticeHome', params: { subjectId: s.id } })}
                   >
                     {/* Color dot */}
                     <View style={[styles.subjectListDot, { backgroundColor: palette.bg }]}>
@@ -797,9 +797,8 @@ export default function HomeScreen() {
                         <Pressable
                           style={styles.sessionStartBtn}
                           onPress={() => tabNav.navigate('Practice', {
-                            subjectId: item.subjectId,
-                            topicId: item.topicId,
-                            returnTo: 'Home',
+                            screen: 'Session',
+                            params: { topicId: item.topicId, subjectId: item.subjectId, returnTo: 'Home' },
                           })}
                         >
                           <Text style={styles.sessionStartBtnText}>

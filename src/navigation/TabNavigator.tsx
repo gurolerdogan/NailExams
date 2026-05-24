@@ -1,10 +1,12 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import type { NavigatorScreenParams } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
 import HomeNavigator from './HomeNavigator';
-import PracticeScreen from '../screens/PracticeScreen';
+import PracticeNavigator from './PracticeNavigator';
+import type { PracticeStackParamList } from './PracticeNavigator';
 import PlanScreen from '../screens/PlanScreen';
 import SettingsNavigator from './SettingsNavigator';
 import type { SettingsStackParamList } from './SettingsNavigator';
@@ -12,7 +14,7 @@ import { useTheme } from '../context/ThemeContext';
 
 export type AppTabParamList = {
   Home: undefined;
-  Practice: { subjectId?: string; topicId?: string; returnTo?: 'Plan' | 'Home' } | undefined;
+  Practice: NavigatorScreenParams<PracticeStackParamList> | undefined;
   Plan: undefined;
   Settings: NavigatorScreenParams<SettingsStackParamList> | undefined;
 };
@@ -64,7 +66,25 @@ export default function TabNavigator() {
       })}
     >
       <Tab.Screen name="Home" component={HomeNavigator} />
-      <Tab.Screen name="Practice" component={PracticeScreen} />
+      <Tab.Screen
+        name="Practice"
+        component={PracticeNavigator}
+        options={({ route }) => ({
+          tabBarStyle: getFocusedRouteNameFromRoute(route) === 'Session'
+            ? { display: 'none' }
+            : {
+                backgroundColor: theme.colors.tabBarBg,
+                borderTopColor: theme.colors.tabBarBorderTop,
+                borderTopWidth: 0.5,
+              },
+        })}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            e.preventDefault();
+            navigation.navigate('Practice', { screen: 'PracticeHome' });
+          },
+        })}
+      />
       <Tab.Screen name="Plan" component={PlanScreen} />
       <Tab.Screen
         name="Settings"

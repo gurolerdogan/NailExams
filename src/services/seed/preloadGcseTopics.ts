@@ -31,7 +31,7 @@ export async function preloadTopicsForSubjects(params: {
     const topicNames = catalog[subj.name];
     if (!topicNames || topicNames.length === 0) continue;
 
-    for (const topicName of topicNames) {
+    for (const [topicName] of topicNames) {
       const key = `${subj.id}::${normalize(topicName)}`;
       if (existingKey.has(key)) continue;
 
