@@ -19,10 +19,10 @@ import {
 // features can be tested during development.
 const PLUS_GATE_BYPASS = Constants.appOwnership === 'expo';
 
-// Subject limits per exam level
-export const FREE_SUBJECT_LIMIT        = 3;   // GCSE free (kept for back-compat)
-export const FREE_SUBJECT_LIMIT_GCSE   = 3;
-export const FREE_SUBJECT_LIMIT_ALEVEL = 1;
+// Subject limits — subjects are unlimited for all users; MAX is the hard UI cap
+export const FREE_SUBJECT_LIMIT        = 15;  // kept for back-compat, matches MAX
+export const FREE_SUBJECT_LIMIT_GCSE   = 15;
+export const FREE_SUBJECT_LIMIT_ALEVEL = 5;
 
 export const MAX_SUBJECTS_GCSE         = 15;
 export const MAX_SUBJECTS_ALEVEL       = 5;

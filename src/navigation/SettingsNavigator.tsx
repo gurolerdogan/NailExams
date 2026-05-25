@@ -12,6 +12,7 @@ import PaywallScreen from '../screens/PaywallScreen';
 import AnalyticsScreen from '../screens/AnalyticsScreen';
 import ExamDatesScreen from '../screens/ExamDatesScreen';
 import ChoosePlanScreen from '../screens/ChoosePlanScreen';
+import BadgesScreen from '../screens/BadgesScreen';
 import { useTheme } from '../context/ThemeContext';
 
 export type SettingsStackParamList = {
@@ -24,6 +25,7 @@ export type SettingsStackParamList = {
   Analytics: undefined;
   ExamDates: undefined;
   ChoosePlan: undefined;
+  Badges: undefined;
 };
 
 const Stack = createNativeStackNavigator<SettingsStackParamList>();
@@ -83,6 +85,7 @@ export default function SettingsNavigator() {
       <Stack.Screen name="Analytics" component={AnalyticsScreen} options={{ title: 'Analytics' }} />
       <Stack.Screen name="ExamDates" component={ExamDatesScreen} options={{ title: 'Exam dates' }} />
       <Stack.Screen name="ChoosePlan" component={ChoosePlanScreen} options={{ title: 'Choose a Plan' }} />
+      <Stack.Screen name="Badges" component={BadgesScreen} options={{ title: 'Your Badges' }} />
     </Stack.Navigator>
   );
 }

@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   Pressable,
   ScrollView,
   Share,
@@ -16,10 +15,11 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import type { Topic } from '../types/models';
 import type { WeeklyPlan } from '../types/plan';
-import { loadPlan, clearPlan } from '../services/storage/planStorage';
+import { loadPlan } from '../services/storage/planStorage';
 import { loadTopics } from '../services/storage/nailexamsStorage';
-import { computeStreak } from '../utils/streak';
-import { logEvent } from '../services/logging/logEvent';
+import { loadAttempts } from '../services/storage/practiceStorage';
+import { computeCheckinStreak } from '../utils/streak';
+import { getTopicWeight, getEstimatedMinutes } from '../utils/catalog';
 import type { AppTabParamList } from '../navigation/TabNavigator';
 import EmptyState from '../components/EmptyState';
 import { TILE_PALETTE } from '../constants/palette';
@@ -71,9 +71,6 @@ function createStyles(theme: Theme) {
       marginBottom: 16,
     },
     screenSub: { flex: 1, fontSize: 12, color: theme.colors.textSecondary },
-    headerActions: { flexDirection: 'row', gap: 12 },
-    headerActionBtn: { paddingVertical: 2 },
-    headerActionText: { fontSize: 12, fontWeight: '500', color: '#185FA5' },
 
     // Summary row
     summaryRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
@@ -263,16 +260,17 @@ export default function PlanScreen() {
 
   // ── Load ─────────────────────────────────────────────────────────────────────
   const load = useCallback(async () => {
-    const [p, t] = await Promise.all([loadPlan(), loadTopics()]);
+    const [p, t, attempts] = await Promise.all([loadPlan(), loadTopics(), loadAttempts()]);
     setPlan(p);
     setTopics(t);
+    setStreak(computeCheckinStreak(attempts));
   }, []);
 
   useEffect(() => { void load(); }, [load]);
   useFocusEffect(useCallback(() => { void load(); }, [load]));
 
   // ── Derived ──────────────────────────────────────────────────────────────────
-  const streak = useMemo(() => plan ? computeStreak(plan.sessions) : 0, [plan]);
+  const [streak, setStreak] = useState(0);
 
   const totalCount = plan?.sessions.length ?? 0;
 
@@ -328,27 +326,6 @@ export default function PlanScreen() {
     tabNav.navigate('Settings', { screen: 'PlanSettings' });
   }, [tabNav]);
 
-  const onRegenerate = () => {
-    Alert.alert('Edit plan?', 'Go to Plan Settings to change your plan configuration and regenerate.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Go to Plan Settings', onPress: goToPlanSettings },
-    ]);
-  };
-
-  const onClear = () => {
-    Alert.alert('Clear plan?', 'This removes the plan from local storage.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Clear',
-        style: 'destructive',
-        onPress: async () => {
-          await clearPlan();
-          setPlan(null);
-          await logEvent('plan_cleared', {});
-        },
-      },
-    ]);
-  };
 
   const shareDayProgress = useCallback(async (
     dayLabel: string,
@@ -374,9 +351,8 @@ export default function PlanScreen() {
   // Deep-link session → Practice
   const openPractice = useCallback((session: WeeklyPlan['sessions'][number]) => {
     tabNav.navigate('Practice', {
-      subjectId: session.subjectId,
-      topicId: session.topicId,
-      returnTo: 'Plan',
+      screen: 'Session',
+      params: { topicId: session.topicId, subjectId: session.subjectId, returnTo: 'Plan' },
     });
   }, [tabNav]);
 
@@ -592,6 +568,9 @@ export default function PlanScreen() {
                     const palette = TILE_PALETTE[paletteIdx];
                     const conf = topicConfidence.get(session.topicId) ?? 0;
                     const checkedIn = conf > 0;
+                    const topicName = session.title.split(' — ')[1] ?? session.title;
+                    const weight = getTopicWeight(topicName);
+                    const mins = getEstimatedMinutes(topicName);
 
                     return (
                       <Pressable
@@ -605,14 +584,29 @@ export default function PlanScreen() {
 
                         <View style={{ flex: 1 }}>
                           <Text style={styles.sessionTitle} numberOfLines={2}>{session.title}</Text>
-                          {checkedIn && (
-                            <View style={styles.sessionMetaRow}>
-                              <View style={[styles.confDot, { backgroundColor: CONF_COLORS[conf - 1] }]} />
-                              <Text style={[styles.confLabel, { color: CONF_COLORS[conf - 1] }]}>
-                                {conf}/5
-                              </Text>
+                          <View style={styles.sessionMetaRow}>
+                            {/* Weight dots */}
+                            <View style={{ flexDirection: 'row', gap: 2, alignItems: 'center' }}>
+                              {[1, 2, 3].map((i) => (
+                                <View
+                                  key={i}
+                                  style={{
+                                    width: 5, height: 5, borderRadius: 2.5,
+                                    backgroundColor: i <= weight ? '#EF9F27' : theme.colors.cardBorder,
+                                  }}
+                                />
+                              ))}
                             </View>
-                          )}
+                            <Text style={{ fontSize: 10, color: theme.colors.textMuted }}>~{mins}m</Text>
+                            {checkedIn && (
+                              <>
+                                <View style={[styles.confDot, { backgroundColor: CONF_COLORS[conf - 1] }]} />
+                                <Text style={[styles.confLabel, { color: CONF_COLORS[conf - 1] }]}>
+                                  {conf}/5
+                                </Text>
+                              </>
+                            )}
+                          </View>
                         </View>
 
                         {done ? (
@@ -645,16 +639,6 @@ export default function PlanScreen() {
           {MONTH_NAMES[calMonth]} {calYear}
           {plan ? ` · ${checkedInCount} of ${totalCount} checked in` : ''}
         </Text>
-        {plan && (
-          <View style={styles.headerActions}>
-            <Pressable onPress={onRegenerate} style={styles.headerActionBtn}>
-              <Text style={styles.headerActionText}>Regenerate</Text>
-            </Pressable>
-            <Pressable onPress={onClear} style={styles.headerActionBtn}>
-              <Text style={[styles.headerActionText, { color: '#E24B4A' }]}>Clear</Text>
-            </Pressable>
-          </View>
-        )}
       </View>
 
       {!plan ? (

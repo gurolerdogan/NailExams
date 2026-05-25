@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs ls -la)",
+      "Bash(node transform_catalog.js)",
+      "Bash(grep -n \"^    '.*',$\" /Users/gurolerdogan/NailExams/src/data/gcseTopicCatalog.ts)",
+      "Bash(git checkout *)",
+      "Bash(python3 -c ' *)"
+    ]
+  }
+}

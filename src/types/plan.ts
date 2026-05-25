@@ -16,6 +16,8 @@ export type PlanConfig = {
   subjectIds: string[];
   topicsPerDay: 1 | 2 | 3 | 4;
   topicOrder: TopicOrder;
+  /** Mon=0 … Sun=6 */
+  studyDays: number[];
 };
 
 export type WeeklyPlan = {

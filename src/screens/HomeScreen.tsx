@@ -17,9 +17,14 @@ import { usePlus } from '../context/PlusContext';
 import { loadPlan } from '../services/storage/planStorage';
 import { loadTopics } from '../services/storage/nailexamsStorage';
 import { loadAttempts } from '../services/storage/practiceStorage';
-import { loadWeeklyGoal, type WeeklyGoal } from '../services/storage/weeklyGoalStorage';
-import { computeStreak } from '../utils/streak';
+import { loadPlanConfig } from '../services/storage/planStorage';
+import { computeCheckinStreak } from '../utils/streak';
 import { maybePromptOnStreak } from '../utils/reviewPrompt';
+import { loadEarnedBadgeIds } from '../services/badges/badgeService';
+import { BADGE_CATALOG, BADGE_BY_ID } from '../types/badges';
+
+const TOTAL_VISIBLE_BADGES = BADGE_CATALOG.filter((b) => b.tier !== 'Hidden').length;
+import { computeBalanceWarning } from '../utils/balance';
 import type { WeeklyPlan } from '../types/plan';
 import type { Topic } from '../types/models';
 import type { AppTabParamList } from '../navigation/TabNavigator';
@@ -116,10 +121,13 @@ function createStyles(theme: Theme) {
 
     appTitle: { fontSize: 32, fontWeight: theme.fonts.headingWeight, color: theme.colors.textPrimary, marginBottom: 12, fontFamily: theme.fonts.heading, letterSpacing: theme.fonts.letterSpacingHeading },
 
-    // Profile card
+    // Merged profile + stats card
     profileCard: {
       backgroundColor: theme.colors.profileCardBg, borderRadius: theme.radii.card, padding: 16,
-      flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 10,
+      marginBottom: 16,
+    },
+    profileTopRow: {
+      flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 14,
     },
     avatar: {
       width: 46, height: 46, borderRadius: 23, backgroundColor: '#333',
@@ -131,15 +139,18 @@ function createStyles(theme: Theme) {
     profileMeta: { fontSize: 11, color: theme.colors.profileCardMeta, marginTop: 3 },
     levelBadge: {
       backgroundColor: theme.colors.profileBadgeBg, borderRadius: theme.radii.input,
-      paddingHorizontal: 10, paddingVertical: 4, flexShrink: 0,
+      paddingHorizontal: 10, paddingVertical: 6, flexShrink: 0,
+      alignItems: 'center', gap: 3,
     },
-    levelBadgeText: { fontSize: 11, fontWeight: '500', color: theme.colors.profileBadgeText },
-
-    // Stats row
-    statsRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
-    statCard: { flex: 1, backgroundColor: theme.colors.cardBg, borderRadius: 14, padding: 10 },
-    statVal: { fontSize: 20, fontWeight: '600', color: theme.colors.textPrimary },
-    statLabel: { fontSize: 11, color: theme.colors.textMuted, marginTop: 1 },
+    levelBadgeText: { fontSize: 11, fontWeight: '600', color: theme.colors.profileBadgeText, textAlign: 'center' },
+    levelBadgeMeta: { fontSize: 10, color: theme.colors.profileCardMeta, textAlign: 'center' },
+    statsGrid: { flexDirection: 'row', gap: 8 },
+    statCell: {
+      flex: 1, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 10, padding: 10,
+      alignItems: 'center',
+    },
+    statVal: { fontSize: 18, fontWeight: '700', color: theme.colors.profileCardText, textAlign: 'center' },
+    statLabel: { fontSize: 10, color: theme.colors.profileCardMeta, marginTop: 2, textAlign: 'center' },
 
     pillSwitcher: {
       flexDirection: 'row',
@@ -296,34 +307,40 @@ export default function HomeScreen() {
     [],
   );
 
-  const [mode, setMode] = useState<HomeMode>('subjects');
+  const [mode, setMode] = useState<HomeMode>('plan');
   const [plan, setPlan] = useState<WeeklyPlan | null>(null);
   const [allTopics, setAllTopics] = useState<Topic[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>(toISODate(new Date()));
-  const [weeklyGoal, setWeeklyGoal] = useState<WeeklyGoal | null>(null);
-  const [weekCheckins, setWeekCheckins] = useState(0);
-
-  const streak = useMemo(() => {
-    const real = plan ? computeStreak(plan.sessions) : 0;
-    // DEV ONLY — inflates streak for App Store screenshots. Revert before release.
-    return __DEV__ ? Math.max(real, 5) : real;
-  }, [plan]);
+  const [weeklyGoal, setWeeklyGoal]       = useState<number | null>(null);
+  const [weekCheckins, setWeekCheckins]   = useState(0);
+  const [balanceWarning, setBalanceWarning] = useState<ReturnType<typeof computeBalanceWarning>>(null);
+  const [warnDismissed, setWarnDismissed] = useState(false);
+  const [earnedCount, setEarnedCount] = useState(0);
+  const [streak, setStreak] = useState(0);
 
   const load = useCallback(async () => {
     await refreshUserData();
-    const [p, t, attempts, goal] = await Promise.all([
-      loadPlan(), loadTopics(), loadAttempts(), loadWeeklyGoal(),
+    const [p, t, attempts, config] = await Promise.all([
+      loadPlan(), loadTopics(), loadAttempts(), loadPlanConfig(),
     ]);
     setPlan(p);
     setAllTopics(t);
-    setWeeklyGoal(goal);
-    // Count check-ins since Monday 00:00
-    const monday = new Date(); monday.setHours(0,0,0,0);
+    // Derived weekly goal: topics/day × selected study days
+    const derived = config.topicsPerDay * (config.studyDays?.length ?? 5);
+    setWeeklyGoal(derived > 0 ? derived : null);
+    // Count unique topics checked in since Monday 00:00
+    const monday = new Date(); monday.setHours(0, 0, 0, 0);
     monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
-    const weekAttempts = attempts.filter((a) => a.ts >= monday.getTime());
-    const uniqueTopics = new Set(weekAttempts.map((a) => a.topicId));
+    const weekAttempts = attempts.filter((a: { ts: number }) => a.ts >= monday.getTime());
+    const uniqueTopics = new Set(weekAttempts.map((a: { topicId: string }) => a.topicId));
     setWeekCheckins(uniqueTopics.size);
-  }, [refreshUserData]);
+    // Balance warning — reset dismiss on reload so fresh state is shown
+    setWarnDismissed(false);
+    setStreak(computeCheckinStreak(attempts));
+    setBalanceWarning(computeBalanceWarning(subjects, t, attempts, p));
+    const ids = await loadEarnedBadgeIds();
+    setEarnedCount(ids.filter((id) => BADGE_BY_ID.get(id)?.tier !== 'Hidden').length);
+  }, [refreshUserData, subjects]);
 
   useEffect(() => { void load(); }, [load]);
   useFocusEffect(useCallback(() => { void load(); }, [load]));
@@ -461,41 +478,40 @@ export default function HomeScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.appTitle}>NailExams</Text>
 
-      {/* ── Profile card ── */}
+      {/* ── Profile + stats card ── */}
       <View style={styles.profileCard}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{avatarLetter}</Text>
+        <View style={styles.profileTopRow}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{avatarLetter}</Text>
+          </View>
+          <View style={styles.profileInfo}>
+            <Text style={styles.profileEmail} numberOfLines={1}>{email}</Text>
+          </View>
+          <View style={styles.levelBadge}>
+            <Text style={styles.levelBadgeText}>{level}</Text>
+            <Text style={styles.levelBadgeMeta}>
+              {subjects.length} subj · {allTopics.length} topics
+            </Text>
+          </View>
         </View>
-        <View style={styles.profileInfo}>
-          <Text style={styles.profileEmail} numberOfLines={1}>{email}</Text>
-          <Text style={styles.profileMeta}>
-            {subjects.length} subject{subjects.length !== 1 ? 's' : ''} · {level}
-          </Text>
-        </View>
-        <View style={styles.levelBadge}>
-          <Text style={styles.levelBadgeText}>{level}</Text>
-        </View>
-      </View>
-
-      {/* ── Stats row ── */}
-      <View style={styles.statsRow}>
-        <View style={styles.statCard}>
-          <Text style={styles.statVal}>{subjects.length}</Text>
-          <Text style={styles.statLabel}>Subjects</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statVal}>{allTopics.length}</Text>
-          <Text style={styles.statLabel}>Topics</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={[styles.statVal, { color: '#1D9E75' }]}>{checkedInTopics}</Text>
-          <Text style={styles.statLabel}>Checked in</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={[styles.statVal, { color: streak > 0 ? '#EF9F27' : undefined }]}>
-            {streak > 0 ? `${streak}🔥` : '—'}
-          </Text>
-          <Text style={styles.statLabel}>Streak</Text>
+        <View style={styles.statsGrid}>
+          <View style={styles.statCell}>
+            <Text style={[styles.statVal, { color: '#1D9E75' }]}>{checkedInTopics}</Text>
+            <Text style={styles.statLabel}>Checked in</Text>
+          </View>
+          <View style={styles.statCell}>
+            <Text style={[styles.statVal, { color: streak > 0 ? '#EF9F27' : undefined }]}>
+              {streak > 0 ? `${streak}🔥` : '—'}
+            </Text>
+            <Text style={styles.statLabel}>Streak</Text>
+          </View>
+          <Pressable
+            style={styles.statCell}
+            onPress={() => tabNav.navigate('Settings', { screen: 'Badges' })}
+          >
+            <Text style={styles.statVal}>{earnedCount}/{TOTAL_VISIBLE_BADGES}</Text>
+            <Text style={styles.statLabel}>Badges</Text>
+          </Pressable>
         </View>
       </View>
 
@@ -559,19 +575,19 @@ export default function HomeScreen() {
 
       <View style={styles.pillSwitcher}>
         <Pressable
-          style={[styles.pill, mode === 'subjects' && styles.pillActive]}
-          onPress={() => setMode('subjects')}
-        >
-          <Text style={[styles.pillText, mode === 'subjects' && styles.pillTextActive]}>
-            Subjects
-          </Text>
-        </Pressable>
-        <Pressable
           style={[styles.pill, mode === 'plan' && styles.pillActive]}
           onPress={() => setMode('plan')}
         >
           <Text style={[styles.pillText, mode === 'plan' && styles.pillTextActive]}>
             Study plan
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[styles.pill, mode === 'subjects' && styles.pillActive]}
+          onPress={() => setMode('subjects')}
+        >
+          <Text style={[styles.pillText, mode === 'subjects' && styles.pillTextActive]}>
+            Subjects
           </Text>
         </Pressable>
       </View>
@@ -600,15 +616,23 @@ export default function HomeScreen() {
                 const palette  = TILE_PALETTE[idx % TILE_PALETTE.length];
                 const stats    = subjectStats.get(s.id) ?? { bars: [0,0,0,0,0], checkedIn: 0, total: 0 };
                 const examDays = examDaysMap.get(s.id);
-                const examColor = examDays === undefined ? null
-                  : examDays < 14 ? '#E24B4A'
-                  : examDays < 30 ? '#EF9F27'
+                const examPhase = examDays === undefined ? null
+                  : examDays <= 7 ? 'final'
+                  : examDays <= 20 ? 'crunch'
+                  : 'normal';
+                const examColor = examPhase === 'final' ? '#E24B4A'
+                  : examPhase === 'crunch' ? '#EF9F27'
                   : palette.text;
                 return (
                   <Pressable
                     key={s.id}
-                    style={[styles.subjectTile, { backgroundColor: palette.bg }]}
-                    onPress={() => tabNav.navigate('Practice', { subjectId: s.id, topicId: undefined })}
+                    style={[
+                      styles.subjectTile,
+                      { backgroundColor: palette.bg },
+                      examPhase === 'final' && { borderWidth: 2, borderColor: '#E24B4A' },
+                      examPhase === 'crunch' && { borderWidth: 1.5, borderColor: '#EF9F27' },
+                    ]}
+                    onPress={() => tabNav.navigate('Practice', { screen: 'PracticeHome', params: { subjectId: s.id } })}
                   >
                     {/* Exam countdown badge — top-right corner */}
                     {examDays !== undefined && (
@@ -658,7 +682,7 @@ export default function HomeScreen() {
                   <Pressable
                     key={s.id}
                     style={[styles.subjectListRow, isLast && styles.subjectListRowLast]}
-                    onPress={() => tabNav.navigate('Practice', { subjectId: s.id, topicId: undefined })}
+                    onPress={() => tabNav.navigate('Practice', { screen: 'PracticeHome', params: { subjectId: s.id } })}
                   >
                     {/* Color dot */}
                     <View style={[styles.subjectListDot, { backgroundColor: palette.bg }]}>
@@ -711,7 +735,7 @@ export default function HomeScreen() {
             <EmptyState
               icon="calendar-outline"
               title="No study plan yet"
-              body="Set up your plan in Plan Settings to schedule your revision sessions."
+              body={"Set up your plan in Plan Settings to get scheduled revision sessions — or browse your subjects and check in freely on any topic."}
               cta="Set up plan"
               onCta={() => tabNav.navigate('Settings', { screen: 'PlanSettings' })}
             />
@@ -781,9 +805,8 @@ export default function HomeScreen() {
                         <Pressable
                           style={styles.sessionStartBtn}
                           onPress={() => tabNav.navigate('Practice', {
-                            subjectId: item.subjectId,
-                            topicId: item.topicId,
-                            returnTo: 'Home',
+                            screen: 'Session',
+                            params: { topicId: item.topicId, subjectId: item.subjectId, returnTo: 'Home' },
                           })}
                         >
                           <Text style={styles.sessionStartBtnText}>
@@ -818,6 +841,39 @@ export default function HomeScreen() {
           )}
         </View>
       )}
+      {/* ── Subject balance warning ── */}
+      {balanceWarning && !warnDismissed && (
+        <Pressable
+          onPress={() => setWarnDismissed(true)}
+          style={{
+            flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+            backgroundColor: balanceWarning.severity === 3 ? '#FAEEDA' : theme.colors.cardBg,
+            borderRadius: 12, padding: 12, marginTop: 8,
+            borderWidth: 1,
+            borderColor: balanceWarning.severity === 3 ? '#EF9F27' : theme.colors.cardBorder,
+          }}
+        >
+          <Text style={{ fontSize: 18 }}>
+            {balanceWarning.type === 'neglected' ? '⚖️' : balanceWarning.type === 'weekly_skew' ? '📊' : '💡'}
+          </Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{
+              fontSize: 13, fontWeight: '600', lineHeight: 18,
+              color: balanceWarning.severity === 3 ? '#633806' : theme.colors.textPrimary,
+            }}>
+              {balanceWarning.message}
+            </Text>
+            <Text style={{
+              fontSize: 11, marginTop: 2,
+              color: balanceWarning.severity === 3 ? '#854D0E' : theme.colors.textMuted,
+            }}>
+              {balanceWarning.detail}
+            </Text>
+          </View>
+          <Text style={{ fontSize: 16, color: theme.colors.textMuted, marginTop: 1 }}>×</Text>
+        </Pressable>
+      )}
+
       {/* ── Plus promo banner — free users only ── */}
       {!isPlus && (
         <Pressable

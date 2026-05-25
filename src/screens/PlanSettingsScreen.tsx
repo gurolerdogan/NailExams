@@ -20,7 +20,7 @@ import { useTheme } from '../context/ThemeContext';
 import { usePlus } from '../context/PlusContext';
 import { loadTopics } from '../services/storage/nailexamsStorage';
 import { loadPlanConfig, savePlanConfig, savePlan, loadPlan } from '../services/storage/planStorage';
-import { loadWeeklyGoal, saveWeeklyGoal, type WeeklyGoal } from '../services/storage/weeklyGoalStorage';
+import { loadAttempts } from '../services/storage/practiceStorage';
 import { generatePlan } from '../services/plan/generateWeeklyPlan';
 import { logEvent } from '../services/logging/logEvent';
 import { uuid } from '../utils/id';
@@ -54,6 +54,7 @@ const DEFAULT_CONFIG: PlanConfig = {
   subjectIds: [],
   topicsPerDay: 2,
   topicOrder: 'round-robin',
+  studyDays: [0, 1, 2, 3, 4],
 };
 
 const MONTH_NAMES = [
@@ -256,7 +257,7 @@ function createStyles(theme: Theme) {
 type PlanMode = 'auto' | 'manual';
 
 export default function PlanSettingsScreen() {
-  const { subjects } = useAuth();
+  const { subjects, profile } = useAuth();
   const { theme } = useTheme();
   const { isPlus } = usePlus();
   const tabNav = useNavigation<BottomTabNavigationProp<AppTabParamList>>();
@@ -267,7 +268,6 @@ export default function PlanSettingsScreen() {
   const [planMode, setPlanMode] = useState<PlanMode>('auto');
   const [topics, setTopics]     = useState<Topic[]>([]);
   const [busy, setBusy]         = useState(false);
-  const [weeklyGoal, setWeeklyGoal] = useState<WeeklyGoal | null>(null);
   const [hasActivePlan, setHasActivePlan] = useState(false);
 
   // ── auto-generate ────────────────────────────────────────────────────────────
@@ -292,11 +292,10 @@ export default function PlanSettingsScreen() {
   subjectsRef.current = subjects;
 
   const load = useCallback(async () => {
-    const [savedConfig, allTopics, goal, existingPlan] = await Promise.all([
-      loadPlanConfig(), loadTopics(), loadWeeklyGoal(), loadPlan(),
+    const [savedConfig, allTopics, existingPlan] = await Promise.all([
+      loadPlanConfig(), loadTopics(), loadPlan(),
     ]);
     setTopics(allTopics);
-    setWeeklyGoal(goal);
     setHasActivePlan(!!existingPlan && existingPlan.sessions.length > 0);
     const currentSubjects = subjectsRef.current;
     const subjectIds =
@@ -330,7 +329,7 @@ export default function PlanSettingsScreen() {
 
   const totalTopics = config.subjectIds.reduce((acc, id) => acc + topicCountFor(id), 0);
   const estimatedSessions = Math.min(config.durationDays * config.topicsPerDay, totalTopics);
-  const canGenerate = config.subjectIds.length > 0 && totalTopics > 0;
+  const canGenerate = config.subjectIds.length > 0 && totalTopics > 0 && config.studyDays.length > 0;
 
   const toggleSubject = (id: string) =>
     setConfig((prev) => ({
@@ -433,7 +432,8 @@ export default function PlanSettingsScreen() {
     try {
       setBusy(true);
       await savePlanConfig(config);
-      const plan = generatePlan({ subjects, topics, config });
+      const attempts = await loadAttempts();
+      const plan = generatePlan({ subjects, topics, config, attempts, examDates: profile?.examDates ?? [] });
       await savePlan(plan);
       await logEvent('plan_generated', {
         durationDays: config.durationDays,
@@ -596,26 +596,36 @@ export default function PlanSettingsScreen() {
         );
       })}
 
-      <Text style={styles.sectionLabel}>Weekly check-in goal</Text>
+      <Text style={styles.sectionLabel}>Study days</Text>
       <View style={styles.chipRow}>
-        {([null, 5, 10, 15, 20] as Array<WeeklyGoal | null>).map((g) => {
-          const active = weeklyGoal === g;
+        {(['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] as const).map((label, i) => {
+          const active = config.studyDays.includes(i);
           return (
             <Pressable
-              key={String(g)}
+              key={label}
               style={[styles.chip, active && styles.chipActive]}
-              onPress={() => {
-                setWeeklyGoal(g);
-                void saveWeeklyGoal(g);
-              }}
+              onPress={() =>
+                setConfig((prev) => ({
+                  ...prev,
+                  studyDays: active
+                    ? prev.studyDays.filter((d) => d !== i)
+                    : [...prev.studyDays, i].sort((a, b) => a - b),
+                }))
+              }
             >
-              <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                {g === null ? 'Off' : `${g}/wk`}
-              </Text>
+              <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
             </Pressable>
           );
         })}
       </View>
+      {config.studyDays.length === 0 && (
+        <Text style={styles.warning}>Select at least one study day.</Text>
+      )}
+      {config.studyDays.length > 0 && config.topicsPerDay > 0 && (
+        <Text style={styles.estimate}>
+          {config.topicsPerDay * config.studyDays.length} topics/week goal
+        </Text>
+      )}
 
       {canGenerate ? (
         <Text style={styles.estimate}>

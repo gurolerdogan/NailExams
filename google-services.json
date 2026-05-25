@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "948483076530",
+    "project_id": "nailexams",
+    "storage_bucket": "nailexams.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:948483076530:android:7c6857bd543e6caa70b4ab",
+        "android_client_info": {
+          "package_name": "com.gurolerdogan.nailexams"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "948483076530-rp95umhknv0dpcot8hqjkvngmigl0dlu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCZIcd4swugvVri0lYr6WXmdr5F-0MrTgs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "948483076530-rp95umhknv0dpcot8hqjkvngmigl0dlu.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "948483076530-npmq65i0lqnk6cah7trig8aainjgknmt.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.gurolerdogan.nailexams"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
