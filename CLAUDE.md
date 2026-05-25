@@ -1,7 +1,7 @@
 # NailExams — Project Context for Claude
 
 > Read this at the start of every session. Always read current file contents before editing.
-> Repo: `github.com/gurolerdogan/NailExams` (public) · active branch: `develop` · **current version: 1.6.0**
+> Repo: `github.com/gurolerdogan/NailExams` (public) · active branch: `develop` · **current version: 1.7.0**
 
 ---
 
