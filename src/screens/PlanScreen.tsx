@@ -17,7 +17,8 @@ import type { Topic } from '../types/models';
 import type { WeeklyPlan } from '../types/plan';
 import { loadPlan } from '../services/storage/planStorage';
 import { loadTopics } from '../services/storage/nailexamsStorage';
-import { computeStreak } from '../utils/streak';
+import { loadAttempts } from '../services/storage/practiceStorage';
+import { computeCheckinStreak } from '../utils/streak';
 import { getTopicWeight, getEstimatedMinutes } from '../utils/catalog';
 import type { AppTabParamList } from '../navigation/TabNavigator';
 import EmptyState from '../components/EmptyState';
@@ -259,16 +260,17 @@ export default function PlanScreen() {
 
   // ── Load ─────────────────────────────────────────────────────────────────────
   const load = useCallback(async () => {
-    const [p, t] = await Promise.all([loadPlan(), loadTopics()]);
+    const [p, t, attempts] = await Promise.all([loadPlan(), loadTopics(), loadAttempts()]);
     setPlan(p);
     setTopics(t);
+    setStreak(computeCheckinStreak(attempts));
   }, []);
 
   useEffect(() => { void load(); }, [load]);
   useFocusEffect(useCallback(() => { void load(); }, [load]));
 
   // ── Derived ──────────────────────────────────────────────────────────────────
-  const streak = useMemo(() => plan ? computeStreak(plan.sessions) : 0, [plan]);
+  const [streak, setStreak] = useState(0);
 
   const totalCount = plan?.sessions.length ?? 0;
 

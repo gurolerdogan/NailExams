@@ -603,7 +603,7 @@ export default function PlanSettingsScreen() {
           return (
             <Pressable
               key={label}
-              style={[styles.chipSquare, active && styles.chipActive]}
+              style={[styles.chip, active && styles.chipActive]}
               onPress={() =>
                 setConfig((prev) => ({
                   ...prev,

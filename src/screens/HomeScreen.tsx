@@ -18,8 +18,12 @@ import { loadPlan } from '../services/storage/planStorage';
 import { loadTopics } from '../services/storage/nailexamsStorage';
 import { loadAttempts } from '../services/storage/practiceStorage';
 import { loadPlanConfig } from '../services/storage/planStorage';
-import { computeStreak } from '../utils/streak';
+import { computeCheckinStreak } from '../utils/streak';
 import { maybePromptOnStreak } from '../utils/reviewPrompt';
+import { loadEarnedBadgeIds } from '../services/badges/badgeService';
+import { BADGE_CATALOG, BADGE_BY_ID } from '../types/badges';
+
+const TOTAL_VISIBLE_BADGES = BADGE_CATALOG.filter((b) => b.tier !== 'Hidden').length;
 import { computeBalanceWarning } from '../utils/balance';
 import type { WeeklyPlan } from '../types/plan';
 import type { Topic } from '../types/models';
@@ -117,10 +121,13 @@ function createStyles(theme: Theme) {
 
     appTitle: { fontSize: 32, fontWeight: theme.fonts.headingWeight, color: theme.colors.textPrimary, marginBottom: 12, fontFamily: theme.fonts.heading, letterSpacing: theme.fonts.letterSpacingHeading },
 
-    // Profile card
+    // Merged profile + stats card
     profileCard: {
       backgroundColor: theme.colors.profileCardBg, borderRadius: theme.radii.card, padding: 16,
-      flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 10,
+      marginBottom: 16,
+    },
+    profileTopRow: {
+      flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 14,
     },
     avatar: {
       width: 46, height: 46, borderRadius: 23, backgroundColor: '#333',
@@ -132,15 +139,18 @@ function createStyles(theme: Theme) {
     profileMeta: { fontSize: 11, color: theme.colors.profileCardMeta, marginTop: 3 },
     levelBadge: {
       backgroundColor: theme.colors.profileBadgeBg, borderRadius: theme.radii.input,
-      paddingHorizontal: 10, paddingVertical: 4, flexShrink: 0,
+      paddingHorizontal: 10, paddingVertical: 6, flexShrink: 0,
+      alignItems: 'center', gap: 3,
     },
-    levelBadgeText: { fontSize: 11, fontWeight: '500', color: theme.colors.profileBadgeText },
-
-    // Stats row
-    statsRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
-    statCard: { flex: 1, backgroundColor: theme.colors.cardBg, borderRadius: 14, padding: 10 },
-    statVal: { fontSize: 20, fontWeight: '600', color: theme.colors.textPrimary },
-    statLabel: { fontSize: 11, color: theme.colors.textMuted, marginTop: 1 },
+    levelBadgeText: { fontSize: 11, fontWeight: '600', color: theme.colors.profileBadgeText, textAlign: 'center' },
+    levelBadgeMeta: { fontSize: 10, color: theme.colors.profileCardMeta, textAlign: 'center' },
+    statsGrid: { flexDirection: 'row', gap: 8 },
+    statCell: {
+      flex: 1, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 10, padding: 10,
+      alignItems: 'center',
+    },
+    statVal: { fontSize: 18, fontWeight: '700', color: theme.colors.profileCardText, textAlign: 'center' },
+    statLabel: { fontSize: 10, color: theme.colors.profileCardMeta, marginTop: 2, textAlign: 'center' },
 
     pillSwitcher: {
       flexDirection: 'row',
@@ -305,12 +315,8 @@ export default function HomeScreen() {
   const [weekCheckins, setWeekCheckins]   = useState(0);
   const [balanceWarning, setBalanceWarning] = useState<ReturnType<typeof computeBalanceWarning>>(null);
   const [warnDismissed, setWarnDismissed] = useState(false);
-
-  const streak = useMemo(() => {
-    const real = plan ? computeStreak(plan.sessions) : 0;
-    // DEV ONLY — inflates streak for App Store screenshots. Revert before release.
-    return __DEV__ ? Math.max(real, 5) : real;
-  }, [plan]);
+  const [earnedCount, setEarnedCount] = useState(0);
+  const [streak, setStreak] = useState(0);
 
   const load = useCallback(async () => {
     await refreshUserData();
@@ -330,7 +336,10 @@ export default function HomeScreen() {
     setWeekCheckins(uniqueTopics.size);
     // Balance warning — reset dismiss on reload so fresh state is shown
     setWarnDismissed(false);
+    setStreak(computeCheckinStreak(attempts));
     setBalanceWarning(computeBalanceWarning(subjects, t, attempts, p));
+    const ids = await loadEarnedBadgeIds();
+    setEarnedCount(ids.filter((id) => BADGE_BY_ID.get(id)?.tier !== 'Hidden').length);
   }, [refreshUserData, subjects]);
 
   useEffect(() => { void load(); }, [load]);
@@ -469,41 +478,40 @@ export default function HomeScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.appTitle}>NailExams</Text>
 
-      {/* ── Profile card ── */}
+      {/* ── Profile + stats card ── */}
       <View style={styles.profileCard}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{avatarLetter}</Text>
+        <View style={styles.profileTopRow}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{avatarLetter}</Text>
+          </View>
+          <View style={styles.profileInfo}>
+            <Text style={styles.profileEmail} numberOfLines={1}>{email}</Text>
+          </View>
+          <View style={styles.levelBadge}>
+            <Text style={styles.levelBadgeText}>{level}</Text>
+            <Text style={styles.levelBadgeMeta}>
+              {subjects.length} subj · {allTopics.length} topics
+            </Text>
+          </View>
         </View>
-        <View style={styles.profileInfo}>
-          <Text style={styles.profileEmail} numberOfLines={1}>{email}</Text>
-          <Text style={styles.profileMeta}>
-            {subjects.length} subject{subjects.length !== 1 ? 's' : ''} · {level}
-          </Text>
-        </View>
-        <View style={styles.levelBadge}>
-          <Text style={styles.levelBadgeText}>{level}</Text>
-        </View>
-      </View>
-
-      {/* ── Stats row ── */}
-      <View style={styles.statsRow}>
-        <View style={styles.statCard}>
-          <Text style={styles.statVal}>{subjects.length}</Text>
-          <Text style={styles.statLabel}>Subjects</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statVal}>{allTopics.length}</Text>
-          <Text style={styles.statLabel}>Topics</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={[styles.statVal, { color: '#1D9E75' }]}>{checkedInTopics}</Text>
-          <Text style={styles.statLabel}>Checked in</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={[styles.statVal, { color: streak > 0 ? '#EF9F27' : undefined }]}>
-            {streak > 0 ? `${streak}🔥` : '—'}
-          </Text>
-          <Text style={styles.statLabel}>Streak</Text>
+        <View style={styles.statsGrid}>
+          <View style={styles.statCell}>
+            <Text style={[styles.statVal, { color: '#1D9E75' }]}>{checkedInTopics}</Text>
+            <Text style={styles.statLabel}>Checked in</Text>
+          </View>
+          <View style={styles.statCell}>
+            <Text style={[styles.statVal, { color: streak > 0 ? '#EF9F27' : undefined }]}>
+              {streak > 0 ? `${streak}🔥` : '—'}
+            </Text>
+            <Text style={styles.statLabel}>Streak</Text>
+          </View>
+          <Pressable
+            style={styles.statCell}
+            onPress={() => tabNav.navigate('Settings', { screen: 'Badges' })}
+          >
+            <Text style={styles.statVal}>{earnedCount}/{TOTAL_VISIBLE_BADGES}</Text>
+            <Text style={styles.statLabel}>Badges</Text>
+          </Pressable>
         </View>
       </View>
 

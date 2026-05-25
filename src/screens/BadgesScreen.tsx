@@ -3,7 +3,7 @@ import { Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-nati
 import { useFocusEffect } from '@react-navigation/native';
 
 import { useTheme } from '../context/ThemeContext';
-import { BADGE_CATALOG, BADGE_BY_ID, type BadgeId, type BadgeTier } from '../types/badges';
+import { BADGE_CATALOG, BADGE_BY_ID, type BadgeId, type BadgeTier, type BadgeDefinition } from '../types/badges';
 import { loadEarnedBadgeIds, markProgressShared } from '../services/badges/badgeService';
 import { logEvent } from '../services/logging/logEvent';
 import type { Theme } from '../themes';
@@ -55,6 +55,11 @@ function createStyles(theme: Theme) {
       paddingHorizontal: 7, paddingVertical: 2, marginTop: 2,
     },
     tierText: { fontSize: 10, fontWeight: '600' },
+    shareBtn: {
+      marginTop: 6, borderRadius: 8, paddingVertical: 6,
+      backgroundColor: theme.colors.screenBg, alignItems: 'center',
+    },
+    shareBtnText: { fontSize: 11, fontWeight: '600', color: theme.colors.accent },
   });
 }
 
@@ -75,6 +80,13 @@ export default function BadgesScreen() {
   const load = useCallback(async () => {
     const ids = await loadEarnedBadgeIds();
     setEarnedIds(new Set(ids));
+  }, []);
+
+  const shareBadge = useCallback(async (def: BadgeDefinition) => {
+    try {
+      await Share.share({ message: `I just unlocked the "${def.name}" badge ${def.emoji} on NailExams! 📚` });
+      void logEvent('badge_shared', { badgeId: def.id });
+    } catch { /* dismissed */ }
   }, []);
 
   useEffect(() => { void load(); }, [load]);
@@ -123,6 +135,11 @@ export default function BadgesScreen() {
                     <View style={[styles.tierPill, { backgroundColor: colors.bg }]}>
                       <Text style={[styles.tierText, { color: colors.text }]}>{def.tier}</Text>
                     </View>
+                  )}
+                  {isEarned && !isHidden && (
+                    <Pressable style={styles.shareBtn} onPress={() => void shareBadge(def)}>
+                      <Text style={styles.shareBtnText}>📤 Share</Text>
+                    </Pressable>
                   )}
                 </View>
               );

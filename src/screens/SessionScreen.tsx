@@ -8,6 +8,7 @@ import {
   Linking,
   Platform,
   Pressable,
+  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -32,7 +33,7 @@ import { logEvent } from '../services/logging/logEvent';
 import { PAST_PAPER_LINKS } from '../data/pastPaperLinks';
 import { maybePromptOnNailedIt } from '../utils/reviewPrompt';
 import { getActiveFastLaneIds } from '../utils/fastLane';
-import { computeStreak } from '../utils/streak';
+import { computeCheckinStreak } from '../utils/streak';
 import { loadPlan } from '../services/storage/planStorage';
 import { getEstimatedMinutes } from '../utils/catalog';
 import { getTipForSession } from '../notifications/revisionTips';
@@ -60,6 +61,15 @@ type SessionNav = NativeStackNavigationProp<PracticeStackParamList, 'Session'>;
 function createStyles(theme: Theme) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.colors.screenBg },
+    frame: {
+      flex: 1,
+      margin: 10,
+      borderRadius: 22,
+      overflow: 'hidden',
+      backgroundColor: theme.colors.cardBg,
+      borderWidth: 1,
+      borderColor: theme.colors.cardBorder,
+    },
     content: { padding: 20, paddingBottom: 40 },
 
     sessionTile: {
@@ -245,6 +255,11 @@ export default function SessionScreen() {
 
   const [badgeToast, setBadgeToast] = useState<BadgeId | null>(null);
   const badgeQueueRef = useRef<BadgeId[]>([]);
+
+  const [streakPopup, setStreakPopup] = useState<number | null>(null);
+  const streakAnim = useRef(new Animated.Value(0)).current;
+  const pendingStreakRef = useRef<number | null>(null);
+  const streakDismissRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const topicNailedCardRef    = useRef<any>(null);
   const subjectClearedCardRef = useRef<any>(null);
@@ -450,29 +465,36 @@ export default function SessionScreen() {
     })();
   }, [topicId]);
 
-  // Set header title: topic name at rest, countdown when timer is running/paused
-  useEffect(() => {
-    if (!topic) return;
-    if (phase === 'running' || phase === 'paused') return; // updateTimerDisplay owns the title
-    navigation.setOptions({ title: topic.name });
-  }, [topic, navigation, phase]);
 
-  // Single exit point: clears the auto-dismiss timer, hides overlay, navigates back.
-  const closeAndNavigate = useCallback(() => {
-    if (autoDismissRef.current) {
-      clearTimeout(autoDismissRef.current);
-      autoDismissRef.current = null;
-    }
-    setCelebration(null);
-    if (badgeQueueRef.current.length > 0) {
-      setBadgeToast(badgeQueueRef.current[0]);
-      badgeQueueRef.current = badgeQueueRef.current.slice(1);
-    }
+  // Final step: dismisses streak popup (if showing) and navigates away.
+  const navigateAway = useCallback(() => {
+    if (streakDismissRef.current) { clearTimeout(streakDismissRef.current); streakDismissRef.current = null; }
+    setStreakPopup(null);
     navigation.goBack();
     if (returnTo) {
       navigation.getParent<BottomTabNavigationProp<AppTabParamList>>()?.navigate(returnTo);
     }
   }, [navigation, returnTo]);
+
+  // Closes celebration, then shows streak popup (if first check-in today), then navigates.
+  const closeAndNavigate = useCallback(() => {
+    if (autoDismissRef.current) { clearTimeout(autoDismissRef.current); autoDismissRef.current = null; }
+    setCelebration(null);
+    if (badgeQueueRef.current.length > 0) {
+      setBadgeToast(badgeQueueRef.current[0]);
+      badgeQueueRef.current = badgeQueueRef.current.slice(1);
+    }
+    if (pendingStreakRef.current !== null) {
+      const s = pendingStreakRef.current;
+      pendingStreakRef.current = null;
+      setStreakPopup(s);
+      streakAnim.setValue(0);
+      Animated.spring(streakAnim, { toValue: 1, useNativeDriver: true, damping: 14, stiffness: 160 }).start();
+      streakDismissRef.current = setTimeout(navigateAway, 2500);
+      return;
+    }
+    navigateAway();
+  }, [navigateAway, streakAnim]);
 
   const showCelebration = useCallback((
     payload: { emoji: string; title: string; sub: string; link?: string },
@@ -488,6 +510,7 @@ export default function SessionScreen() {
   // Clean up timer on unmount
   useEffect(() => () => {
     if (autoDismissRef.current) clearTimeout(autoDismissRef.current);
+    if (streakDismissRef.current) clearTimeout(streakDismissRef.current);
   }, []);
 
   const submit = async () => {
@@ -533,6 +556,12 @@ export default function SessionScreen() {
       const [allAttempts, plan] = await Promise.all([loadAttempts(), loadPlan()]);
       void maybePromptOnNailedIt(confidence, allAttempts.length);
 
+      // Show streak popup if this is the first check-in of today.
+      const todayMidnight = new Date(); todayMidnight.setHours(0, 0, 0, 0);
+      if (allAttempts.filter((a) => a.ts >= todayMidnight.getTime()).length === 1) {
+        pendingStreakRef.current = computeCheckinStreak(allAttempts);
+      }
+
       const allSubjectTopics = nextAll.filter((t) => t.subjectId === subject.id);
       const allNowHigh = allSubjectTopics.every((t) =>
         t.id === topic.id ? confidence >= 4 : (t.confidence ?? 0) >= 4,
@@ -546,7 +575,7 @@ export default function SessionScreen() {
         }
       });
 
-      const currentStreak = computeStreak(plan?.sessions ?? []);
+      const currentStreak = computeCheckinStreak(allAttempts);
 
       if (allNowHigh && allSubjectTopics.length > 0 && confidence >= 4) {
         void logEvent('subject_completed', { subjectId: subject.id });
@@ -611,12 +640,13 @@ export default function SessionScreen() {
 
   return (
     <>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.container}
-      >
+      <SafeAreaView style={styles.container}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <View style={styles.frame}>
         <ScrollView
-          style={styles.container}
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
         >
@@ -714,8 +744,12 @@ export default function SessionScreen() {
                 <Pressable
                   onPress={() => {
                     if (phase === 'running') {
-                      stopTick();  // also sets startTimeRef.current = null
-                      pausedRemaining.current = currentRemaining.current;
+                      const elapsed = startTimeRef.current !== null
+                        ? Math.floor((Date.now() - startTimeRef.current) / 1000)
+                        : 0;
+                      const remaining = Math.max(0, pausedRemaining.current - elapsed);
+                      stopTick();
+                      currentRemaining.current = remaining;
                       setPhase('paused');
                     } else {
                       setPhase('running');
@@ -736,6 +770,15 @@ export default function SessionScreen() {
               </View>
 
               <Text style={styles.bgHint}>Timer keeps running in the background</Text>
+
+              {subject && PAST_PAPER_LINKS[subject.name] && (
+                <Pressable
+                  onPress={() => void Linking.openURL(PAST_PAPER_LINKS[subject!.name])}
+                  style={styles.pastPaperLink}
+                >
+                  <Text style={styles.pastPaperLinkText}>Find past questions →</Text>
+                </Pressable>
+              )}
 
               <Pressable
                 onPress={() => { stopTick(); setPhase('checkin'); }}
@@ -779,15 +822,6 @@ export default function SessionScreen() {
                 editable={!busy}
               />
 
-              {subject && PAST_PAPER_LINKS[subject.name] && (
-                <Pressable
-                  onPress={() => void Linking.openURL(PAST_PAPER_LINKS[subject!.name])}
-                  style={styles.pastPaperLink}
-                >
-                  <Text style={styles.pastPaperLinkText}>Find past questions →</Text>
-                </Pressable>
-              )}
-
               <Pressable
                 style={[styles.saveBtn, (busy || confidence === null) && { opacity: 0.4 }]}
                 onPress={submit}
@@ -808,7 +842,9 @@ export default function SessionScreen() {
             </>
           )}
         </ScrollView>
-      </KeyboardAvoidingView>
+          </View>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
 
       {/* Celebration overlay */}
       {celebration && (
@@ -881,6 +917,45 @@ export default function SessionScreen() {
                 <Text style={{ fontSize: 13, fontWeight: '600', color: '#FFF' }}>Share</Text>
               </Pressable>
             )}
+          </Pressable>
+        </Animated.View>
+      )}
+
+      {/* Streak popup */}
+      {streakPopup !== null && (
+        <Animated.View
+          style={{
+            ...StyleSheet.absoluteFillObject,
+            alignItems: 'center',
+            justifyContent: 'center',
+            opacity: streakAnim,
+            transform: [{ scale: streakAnim.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1] }) }],
+          }}
+        >
+          <Pressable style={StyleSheet.absoluteFillObject} onPress={navigateAway} />
+          <Pressable
+            style={{
+              backgroundColor: 'rgba(10,10,12,0.95)',
+              borderRadius: 28,
+              paddingHorizontal: 32,
+              paddingVertical: 28,
+              alignItems: 'center',
+              gap: 8,
+              marginHorizontal: 32,
+            }}
+            onPress={navigateAway}
+          >
+            <Text style={{ fontSize: 64 }}>🔥</Text>
+            <Text style={{ fontSize: 34, fontWeight: '800', color: '#FAC775', letterSpacing: -0.5 }}>+1</Text>
+            <Text style={{ fontSize: 22, fontWeight: '800', color: '#FFFFFF', textAlign: 'center', letterSpacing: -0.3 }}>
+              {streakPopup === 1 ? 'Streak started!' : `${streakPopup} day streak!`}
+            </Text>
+            <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', textAlign: 'center', lineHeight: 19 }}>
+              {streakPopup === 1
+                ? 'First check-in done. Come back tomorrow!'
+                : 'You checked in today. Keep it going!'}
+            </Text>
+            <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', marginTop: 4 }}>tap to dismiss</Text>
           </Pressable>
         </Animated.View>
       )}

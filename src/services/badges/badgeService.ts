@@ -7,7 +7,7 @@ import { STORAGE_KEYS } from '../storage/keys';
 import { loadAttempts } from '../storage/practiceStorage';
 import { loadTopics, loadSubjects, loadProfile } from '../storage/nailexamsStorage';
 import { loadPlan } from '../storage/planStorage';
-import { computeStreak } from '../../utils/streak';
+import { computeCheckinStreak } from '../../utils/streak';
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -176,7 +176,7 @@ export async function loadEarnedBadgeIds(): Promise<BadgeId[]> {
   const [subjects, topics, attempts, plan, profile] = await Promise.all([
     loadSubjects(), loadTopics(), loadAttempts(), loadPlan(), loadProfile(),
   ]);
-  const streak = plan ? computeStreak(plan.sessions) : 0;
+  const streak = computeCheckinStreak(attempts);
 
   const earned = computeEarnedBadges(subjects, topics, attempts, plan, streak, profile);
 

@@ -6,8 +6,8 @@
 
 ## Blocking — must ship before release
 
-### 0. Dev streak override — revert before release
-- `src/screens/HomeScreen.tsx` — remove `__DEV__ ? Math.max(real, 5) : real` from streak useMemo
+### ✅ 0. Dev streak override — reverted
+- `src/screens/HomeScreen.tsx` — removed `__DEV__ ? Math.max(real, 5) : real` from streak useMemo
 
 ### 1. RevenueCat Android key
 **File:** `src/services/purchases/purchasesService.ts`
@@ -55,13 +55,18 @@
 - Confirm `NE_REVIEW_PROMPTED`, `NE_NOTIF_SETTINGS_V1`, `NE_WEEKLY_GOAL_V1` (deprecated but still in keys.ts) are all wiped
 - Consider removing `NE_WEEKLY_GOAL_V1` from keys.ts entirely since it's no longer written
 
-### 7. Revert dev streak override
-- `src/screens/HomeScreen.tsx` line ~309: `return __DEV__ ? Math.max(real, 5) : real;`
-- Remove after App Store screenshots are taken
-
 ---
 
 ## Done ✓
+
+**Session screen (v1.7 develop)**
+- ✅ Fully inlined timer in `SessionScreen.tsx` — does NOT use `useSessionTimer` hook
+- ✅ Native animated countdown: single `Animated.timing` (linear, `useNativeDriver:true`) drives four digit columns via `Animated.modulo / .divide / .subtract / .add / .interpolate` — zero JS involvement after start; works on React Native 0.81 + Fabric
+- ✅ Mechanical odometer roll: each column holds stable digit for its period, rolls 1 s after ones-column wrap
+- ✅ `Animated.loop` colon blink (native driver)
+- ✅ AppState background compensation: restarts native animation from wall-clock-accurate remaining time
+- ✅ Pause/resume wired correctly
+- ✅ Practice tab `tabPress` always resets to `PracticeHome`; tab bar hidden on Session screen
 
 **Pillar 3 — Engagement (v1.6)**
 - ✅ 3.1 Milestone badges — 19 badges (Bronze/Silver/Gold/Special/Hidden); `badgeService.ts` derives all from existing storage; `BadgesScreen` grid view; badge toast in PracticeScreen after celebration; "Share badge" button (Plus); Settings → Achievements

@@ -22,7 +22,7 @@ export default function PracticeNavigator() {
       <Stack.Screen
         name="Session"
         component={SessionScreen}
-        options={{ headerShown: true }}
+        options={{ headerShown: false }}
       />
     </Stack.Navigator>
   );

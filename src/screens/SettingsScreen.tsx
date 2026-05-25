@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { wipeAll, loadTopics } from '../services/storage/nailexamsStorage';
 import { loadAttempts } from '../services/storage/practiceStorage';
+import { loadPlan } from '../services/storage/planStorage';
 import { deleteAccount } from '../services/auth/authService';
 import { logEvent } from '../services/logging/logEvent';
 import {
@@ -16,7 +17,12 @@ import {
 } from '../services/storage/notificationStorage';
 import { scheduleStudyReminder } from '../services/notifications/notificationService';
 import { usePlus } from '../context/PlusContext';
+import { computeCheckinStreak } from '../utils/streak';
+import { loadEarnedBadgeIds } from '../services/badges/badgeService';
+import { BADGE_CATALOG, BADGE_BY_ID } from '../types/badges';
 import type { Theme } from '../themes';
+
+const TOTAL_VISIBLE_BADGES = BADGE_CATALOG.filter((b) => b.tier !== 'Hidden').length;
 
 const ADMIN_EMAILS = new Set([
   'gurolerdogan@gmail.com',
@@ -81,48 +87,37 @@ function createStyles(theme: Theme) {
 
       screenTitle: { fontSize: 22, fontWeight: theme.fonts.headingWeight as any, color: theme.colors.textPrimary, marginBottom: 16, fontFamily: theme.fonts.heading, letterSpacing: theme.fonts.letterSpacingHeading },
 
-      // Profile card
+      // Merged profile + stats card (identical to HomeScreen)
       profileCard: {
         backgroundColor: theme.colors.profileCardBg,
         borderRadius: theme.radii.card,
         padding: 16,
-        flexDirection: 'row' as const,
-        alignItems: 'center' as const,
-        gap: 14,
-        marginBottom: 10,
+        marginBottom: 16,
+      },
+      profileTopRow: {
+        flexDirection: 'row' as const, alignItems: 'center' as const, gap: 14, marginBottom: 14,
       },
       avatar: {
-        width: 46,
-        height: 46,
-        borderRadius: 23,
-        backgroundColor: '#333',
-        alignItems: 'center' as const,
-        justifyContent: 'center' as const,
-        flexShrink: 0,
+        width: 46, height: 46, borderRadius: 23, backgroundColor: '#333',
+        alignItems: 'center' as const, justifyContent: 'center' as const, flexShrink: 0,
       },
       avatarText: { fontSize: 18, fontWeight: '600' as const, color: theme.colors.profileCardText },
       profileInfo: { flex: 1, minWidth: 0 },
       profileEmail: { fontSize: 13, fontWeight: '500' as const, color: theme.colors.profileCardText },
-      profileMeta: { fontSize: 11, color: theme.colors.profileCardMeta, marginTop: 3 },
       levelBadge: {
-        backgroundColor: theme.colors.profileBadgeBg,
-        borderRadius: theme.radii.input,
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        flexShrink: 0,
+        backgroundColor: theme.colors.profileBadgeBg, borderRadius: theme.radii.input,
+        paddingHorizontal: 10, paddingVertical: 6, flexShrink: 0,
+        alignItems: 'center' as const, gap: 3,
       },
-      levelBadgeText: { fontSize: 11, fontWeight: '500' as const, color: theme.colors.profileBadgeText },
-
-      // Stats row
-      statsRow: { flexDirection: 'row' as const, gap: 8, marginBottom: 20 },
-      statCard: {
-        flex: 1,
-        backgroundColor: theme.colors.cardBg,
-        borderRadius: 14,
-        padding: 10,
+      levelBadgeText: { fontSize: 11, fontWeight: '600' as const, color: theme.colors.profileBadgeText, textAlign: 'center' as const },
+      levelBadgeMeta: { fontSize: 10, color: theme.colors.profileCardMeta, textAlign: 'center' as const },
+      statsGrid: { flexDirection: 'row' as const, gap: 8 },
+      statCell: {
+        flex: 1, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 10, padding: 10,
+        alignItems: 'center' as const,
       },
-      statVal: { fontSize: 20, fontWeight: '600' as const, color: theme.colors.textPrimary },
-      statLabel: { fontSize: 11, color: theme.colors.textMuted, marginTop: 1 },
+      statVal: { fontSize: 18, fontWeight: '700' as const, color: theme.colors.profileCardText, textAlign: 'center' as const },
+      statLabel: { fontSize: 10, color: theme.colors.profileCardMeta, marginTop: 2, textAlign: 'center' as const },
 
       // Section label
       sectionLabel: {
@@ -188,8 +183,10 @@ export default function SettingsScreen({ navigation }: Props) {
 
   const styles = useMemo(() => createStyles(theme), [theme]);
 
-  const [topicCount, setTopicCount]     = useState(0);
-  const [checkinCount, setCheckinCount] = useState(0);
+  const [topicCount, setTopicCount]           = useState(0);
+  const [checkedInTopics, setCheckedInTopics] = useState(0);
+  const [streak, setStreak]                   = useState(0);
+  const [earnedCount, setEarnedCount]         = useState(0);
   const [notifSettings, setNotifSettings] = useState<NotifSettings>({
     extraEnabled: false, extraHour: 20, extraMinute: 0,
   });
@@ -198,11 +195,13 @@ export default function SettingsScreen({ navigation }: Props) {
   const [draftMinute, setDraftMinute] = useState(0);
 
   const loadStats = useCallback(async () => {
-    const [topics, attempts, ns] = await Promise.all([
-      loadTopics(), loadAttempts(), loadNotifSettings(),
+    const [topics, attempts, plan, badgeIds, ns] = await Promise.all([
+      loadTopics(), loadAttempts(), loadPlan(), loadEarnedBadgeIds(), loadNotifSettings(),
     ]);
     setTopicCount(topics.length);
-    setCheckinCount(attempts.length);
+    setCheckedInTopics(topics.filter((t) => (t.confidence ?? 0) > 0).length);
+    setStreak(computeCheckinStreak(attempts));
+    setEarnedCount(badgeIds.filter((id) => BADGE_BY_ID.get(id)?.tier !== 'Hidden').length);
     setNotifSettings(ns);
   }, []);
 
@@ -323,35 +322,40 @@ export default function SettingsScreen({ navigation }: Props) {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.screenTitle}>Settings</Text>
 
-      {/* ── Profile card ── */}
+      {/* ── Profile + stats card ── */}
       <View style={styles.profileCard}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{avatarLetter}</Text>
+        <View style={styles.profileTopRow}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{avatarLetter}</Text>
+          </View>
+          <View style={styles.profileInfo}>
+            <Text style={styles.profileEmail} numberOfLines={1}>{email}</Text>
+          </View>
+          <View style={styles.levelBadge}>
+            <Text style={styles.levelBadgeText}>{profile?.examLevel ?? '—'}</Text>
+            <Text style={styles.levelBadgeMeta}>
+              {subjects.length} subj · {topicCount} topics
+            </Text>
+          </View>
         </View>
-        <View style={styles.profileInfo}>
-          <Text style={styles.profileEmail} numberOfLines={1}>{email}</Text>
-          <Text style={styles.profileMeta}>
-            {subjects.length} subject{subjects.length !== 1 ? 's' : ''} · {profile?.examLevel ?? '—'}
-          </Text>
-        </View>
-        <View style={styles.levelBadge}>
-          <Text style={styles.levelBadgeText}>{profile?.examLevel ?? '—'}</Text>
-        </View>
-      </View>
-
-      {/* ── Stats row ── */}
-      <View style={styles.statsRow}>
-        <View style={styles.statCard}>
-          <Text style={styles.statVal}>{subjects.length}</Text>
-          <Text style={styles.statLabel}>Subjects</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statVal}>{topicCount}</Text>
-          <Text style={styles.statLabel}>Topics</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={[styles.statVal, { color: '#1D9E75' }]}>{checkinCount}</Text>
-          <Text style={styles.statLabel}>Check-ins</Text>
+        <View style={styles.statsGrid}>
+          <View style={styles.statCell}>
+            <Text style={[styles.statVal, { color: '#1D9E75' }]}>{checkedInTopics}</Text>
+            <Text style={styles.statLabel}>Checked in</Text>
+          </View>
+          <View style={styles.statCell}>
+            <Text style={[styles.statVal, { color: streak > 0 ? '#EF9F27' : undefined }]}>
+              {streak > 0 ? `${streak}🔥` : '—'}
+            </Text>
+            <Text style={styles.statLabel}>Streak</Text>
+          </View>
+          <Pressable
+            style={styles.statCell}
+            onPress={() => navigation.navigate('Badges')}
+          >
+            <Text style={styles.statVal}>{earnedCount}/{TOTAL_VISIBLE_BADGES}</Text>
+            <Text style={styles.statLabel}>Badges</Text>
+          </Pressable>
         </View>
       </View>
 
@@ -467,6 +471,18 @@ export default function SettingsScreen({ navigation }: Props) {
         />
       </View>
 
+      {/* ── Achievements section ── */}
+      <Text style={styles.sectionLabel}>Achievements</Text>
+      <View style={styles.menuGroup}>
+        <MenuRow
+          icon="🏅"
+          iconBg="#EEEDFE"
+          label="Your badges"
+          onPress={() => navigation.navigate('Badges')}
+          styles={styles}
+        />
+      </View>
+
       {/* ── Subscription section ── */}
       <Text style={styles.sectionLabel}>Subscription</Text>
       <View style={styles.menuGroup}>
@@ -475,18 +491,6 @@ export default function SettingsScreen({ navigation }: Props) {
           iconBg="#FEF9C3"
           label={isPlus ? 'Manage plan' : 'Choose a Plan'}
           onPress={() => navigation.navigate('ChoosePlan')}
-          styles={styles}
-        />
-      </View>
-
-      {/* ── Badges section ── */}
-      <Text style={styles.sectionLabel}>Achievements</Text>
-      <View style={styles.menuGroup}>
-        <MenuRow
-          icon="🏅"
-          iconBg="#EEEDFE"
-          label="Your badges"
-          onPress={() => navigation.navigate('Badges')}
           styles={styles}
         />
       </View>

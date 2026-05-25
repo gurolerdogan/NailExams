@@ -90,7 +90,9 @@ src/
     catalog.ts        # getTopicWeight(name) → 1|2|3, getEstimatedMinutes(name) → number
     fastLane.ts       # computeFastLane(), getActiveFastLaneIds() — detects stuck topics
     balance.ts        # computeBalanceWarning() — neglected/skewed subject detection
-    sessionTimer.ts   # useSessionTimer(durationSeconds) hook, formatTime()
+    sessionTimer.ts   # useSessionTimer(durationSeconds) hook + formatTime()
+                      # NOTE: SessionScreen does NOT use useSessionTimer — it has its own
+                      # fully-inlined timer (see Session screen section below)
     intentionPlaceholders.ts  # getIntentionPlaceholder(topicName) → string
   notifications/
     messages.ts           # PLAN_REMINDERS, GENERIC_REMINDERS, STREAK_NUDGES, WEEKLY_SUMMARY
@@ -165,7 +167,10 @@ RootNavigator
         └── Logs
 ```
 
-**Tab press behaviour:** Settings tab always resets to SettingsHome via `tabPress` listener (`e.preventDefault()` + `navigate('Settings', { screen: 'SettingsHome' })`). Back button uses `canGoBack()` guard — navigates to SettingsHome if stack has no history.
+**Tab press behaviour:**
+- **Settings** tab always resets to SettingsHome via `tabPress` listener (`e.preventDefault()` + `navigate('Settings', { screen: 'SettingsHome' })`). Back button uses `canGoBack()` guard — navigates to SettingsHome if stack has no history.
+- **Practice** tab always resets to PracticeHome via `tabPress` listener (same pattern — prevents landing on a stale Session screen).
+- Tab bar is hidden on the Session screen via `getFocusedRouteNameFromRoute(route) === 'Session'`.
 
 ---
 
@@ -235,6 +240,33 @@ NE_BADGES_SEEN_V1   NE_PROGRESS_SHARED
 ### Admin accounts
 `SettingsScreen.tsx` has `ADMIN_EMAILS = new Set(['gurolerdogan@gmail.com'])`.
 Admin users see "View logs" row in the Account section.
+
+### Session screen timer (critical — do not rewrite without reading this)
+`SessionScreen.tsx` has a fully **inlined** timer — it does NOT use `useSessionTimer`. This was
+necessary because React 19.1 + React Native 0.81 + Fabric defers `setState` calls from
+`setInterval` and never flushes them to the screen while the app is idle in the foreground.
+
+**Architecture:**
+- `timerAnim` — a single `Animated.Value` counting from `durationSeconds` to `0`.  
+  Started with `Animated.timing(..., { easing: Easing.linear, useNativeDriver: true })`.  
+  Runs entirely on the UI thread; JS is not involved after `.start()`.
+- `digitYs` — four derived animated values (M-tens, M-ones, S-tens, S-ones), each computed
+  via `Animated.modulo / .divide / .subtract / .add / .interpolate` from `timerAnim`.  
+  Each column holds a stable digit for its full period and rolls for exactly 1 second *after*
+  the ones-column wraps (mechanical odometer style). All native-driver-compatible.
+- `colonAnim` — `Animated.loop` on opacity, also native driver, for the blinking colon.
+- `setInterval` (1 s) — only needed to detect `remaining <= 0` and call `setPhase('checkin')`.
+  All visual display is driven by the native animation, not the interval.
+- `AppState` listener — when app returns from background, stops the native animation and
+  restarts it from the wall-clock-accurate remaining time (`currentRemaining.current`).
+- Pause/resume: `timerAnimComp.current.stop()` freezes the native animation; `startTickFrom`
+  restarts it with `Animated.timing(timerAnim, { toValue: 0, duration: remaining*1000 })`.
+
+**Why this is hard:**  
+Seven other approaches were tried (useState, RAF, Animated.Value+interval, setNativeProps,
+useSyncExternalStore, Animated.timing duration:0, Animated.timing duration:200) — all failed
+because Fabric only flushes JS-originated commits when a native event (touch, AppState) arrives.
+The single long-running native animation is the only mechanism that bypasses this entirely.
 
 ---
 
