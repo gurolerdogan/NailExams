@@ -27,6 +27,17 @@ export default (): ExpoConfig => {
         color: '#0A0A0C',
         defaultChannel: 'default',
       }],
+      // Google Sign-In → AppCheckCore (Swift) imports GoogleUtilities + RecaptchaInterop,
+      // which don't define modules. Without modular headers `pod install` fails on EAS:
+      // "The following Swift pods cannot yet be integrated as static libraries".
+      ['expo-build-properties', {
+        ios: {
+          extraPods: [
+            { name: 'GoogleUtilities', modular_headers: true },
+            { name: 'RecaptchaInterop', modular_headers: true },
+          ],
+        },
+      }],
     ],
     splash: {
       image: './assets/splash.png',
@@ -35,13 +46,15 @@ export default (): ExpoConfig => {
     },
     ios: {
       bundleIdentifier: 'com.gurolerdogan.nailexams',
-      buildNumber: '7',
+      // buildNumber is managed remotely by EAS (eas.json appVersionSource: "remote")
       supportsTablet: false,
       usesAppleSignIn: true,
       googleServicesFile: './GoogleService-Info.plist',
       infoPlist: {
         NSCameraUsageDescription: 'NailExams does not use the camera.',
         CFBundleDisplayName: 'NailExams',
+        // Only standard HTTPS/OS-provided crypto is used → exempt from export compliance
+        ITSAppUsesNonExemptEncryption: false,
       },
     },
     android: {

@@ -43,7 +43,7 @@
 ### 2. Code
 - [x] Cloned into `C:\Users\gurol\projects\NailExams`
 - [x] `git checkout develop && git merge --ff-only origin/main` (verified: develop @ 4f9efe1) — *verify: `git log --oneline -1` → 4f9efe1*
-- [ ] Optional: `git push origin develop`
+- [x] Optional: `git push origin develop` — pushed 2026-11-26 (origin/develop @ 5800eda)
 - [x] `npm ci` (node_modules present, dotenv resolves)
 
 ### 3. Secrets & config  ✅ done
@@ -84,7 +84,7 @@ FIREBASE_* must all be `set`. GOOGLE_* are also in `eas.json`, so missing there 
 - [x] `npx expo-doctor` — 18/18 pass after fix (2026-11-26): added expo-font ~14.0.12 (no config plugin needed — app embeds no custom fonts), expo-store-review 55.0.14→~9.0.9, react-native-view-shot 5.1.0→4.0.3 (v4 has no `ViewShotRef` type → shareCard.ts + AnalyticsScreen.tsx now type refs as `ViewShot`), expo ~54.0.37, expo-constants ~18.0.14. **Native deps changed → iOS dev client must be rebuilt**
 - [ ] `npx expo start` — test with existing iOS dev client or Expo Go (Plus bypass active in Expo Go)
 - [ ] ⏸ `npm run android` (local Android build) — on hold
-- [ ] iOS dev client rebuild **required** (native deps changed): `eas build --profile development -p ios`
+- [ ] iOS dev client rebuild **required** (native deps changed): `eas build --profile development --platform ios` (run from your own terminal). 1st attempt (build be8f76d0) failed in pod install: AppCheckCore needs modular headers for GoogleUtilities + RecaptchaInterop → fixed via expo-build-properties `ios.extraPods` in app.config.ts
 - [ ] ⏸ Android Google Sign-In: register debug/EAS keystore SHA-1 in Firebase if sign-in fails
 
 ### 7. Claude Code locally
