@@ -1,5 +1,5 @@
 import { Share, Platform } from 'react-native';
-import type { ViewShotRef } from 'react-native-view-shot';
+import type ViewShot from 'react-native-view-shot';
 import { markProgressShared } from '../../services/badges/badgeService';
 import { logEvent } from '../../services/logging/logEvent';
 
@@ -8,15 +8,16 @@ import { logEvent } from '../../services/logging/logEvent';
  * Falls back to text-only on Android or if capture fails.
  */
 export async function shareCardImage(
-  ref: React.RefObject<ViewShotRef>,
+  ref: React.RefObject<ViewShot | null>,
   fallbackText: string,
   eventName: string,
   eventProps?: Record<string, unknown>,
 ): Promise<void> {
   try {
     let uri: string | null = null;
-    if (ref.current && 'capture' in ref.current) {
-      try { uri = await (ref.current as ViewShotRef).capture(); } catch { /* fall through */ }
+    const capture = ref.current?.capture;
+    if (capture) {
+      try { uri = await capture.call(ref.current); } catch { /* fall through */ }
     }
 
     if (uri) {

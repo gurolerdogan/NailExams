@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import ViewShot, { type ViewShotRef } from 'react-native-view-shot';
+import ViewShot from 'react-native-view-shot';
 
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -205,7 +205,7 @@ export default function AnalyticsScreen() {
   const [range, setRange]             = useState<Range>(30);
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   const [sharing, setSharing]         = useState(false);
-  const cardRef = useRef<ViewShotRef>(null);
+  const cardRef = useRef<ViewShot>(null);
 
   const load = useCallback(async () => {
     const [a, t] = await Promise.all([loadAttempts(), loadTopics()]);
@@ -277,8 +277,9 @@ export default function AnalyticsScreen() {
     try {
       // Try image card first
       let uri: string | null = null;
-      if (cardRef.current?.capture) {
-        try { uri = await (cardRef.current as ViewShotRef).capture(); } catch { /* fall through */ }
+      const capture = cardRef.current?.capture;
+      if (capture) {
+        try { uri = await capture.call(cardRef.current); } catch { /* fall through */ }
       }
 
       if (uri) {
